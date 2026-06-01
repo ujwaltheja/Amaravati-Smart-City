@@ -1,7 +1,7 @@
 package com.uc.amaravatismartcity.navigation
 
 import kotlinx.serialization.Serializable
-import androidx.navigation3.NavKey
+import androidx.navigation3.runtime.NavKey
 
 @Serializable
 sealed interface AppRoute : NavKey {

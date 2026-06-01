@@ -8,9 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import androidx.navigation3.NavDisplay
-import androidx.navigation3.rememberNavBackStack
-import androidx.navigation3.entryProvider
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.ui.NavDisplay
 import com.uc.amaravatismartcity.navigation.AppRoute
 import com.uc.amaravatismartcity.ui.screens.MainMenuScreen
 import com.uc.amaravatismartcity.ui.screens.CityViewScreen
@@ -26,15 +26,15 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val backstack = rememberNavBackStack(initialKey = AppRoute.MainMenu)
+                    val backStack = rememberNavBackStack(AppRoute.MainMenu)
 
                     NavDisplay(
-                        backstack = backstack,
-                        onBack = { if (backstack.size > 1) backstack.removeLast() },
+                        backStack = backStack,
+                        onBack = { backStack.removeLastOrNull() },
                         entryProvider = entryProvider {
                             entry<AppRoute.MainMenu> {
                                 MainMenuScreen(
-                                    onNewGame = { backstack.add(AppRoute.CityView) },
+                                    onNewGame = { backStack.add(AppRoute.CityView) },
                                     onAbout = { /* TODO */ }
                                 )
                             }
