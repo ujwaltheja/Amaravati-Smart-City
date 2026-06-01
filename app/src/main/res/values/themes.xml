@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.AmaravatiSmartCity" parent="Theme.MaterialComponents.Light" />
+</resources>
