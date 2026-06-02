@@ -1,48 +1,23 @@
 package com.uc.amaravatismartcity.game
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.key
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -157,9 +132,9 @@ fun AmaravatiGameSurface(
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF07111F),
-                        Color(0xFF0F2237),
-                        Color(0xFF15324A)
+                        Color(0xFF020811),
+                        Color(0xFF05111E),
+                        Color(0xFF081A2D)
                     )
                 )
             )
@@ -193,82 +168,237 @@ fun AmaravatiGameSurface(
             }
         }
 
-        GameHud(
+        // Top UI Layer
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 48.dp, start = 12.dp, end = 12.dp),
-            gameState = gameState,
-            activeGoal = activeGoal
-        )
-
-        NewsTicker(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 12.dp),
-            news = currentNews
-        )
-
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 4.dp, start = 4.dp)
+                .padding(top = 16.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.ArrowBack,
-                contentDescription = "Back to Menu",
-                tint = Color.White
+            GameTopBar(
+                gameState = gameState,
+                onBack = onBack
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            NewsTicker(
+                news = currentNews
             )
         }
 
-        GameBuildBar(
+        // Goal Tracker (Left Side)
+        GoalTracker(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 16.dp),
+            activeGoal = activeGoal
+        )
+
+        // Bottom UI Layer
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(12.dp),
-            buildingCatalog = buildingCatalog,
-            selectedBuilding = selectedBuilding,
-            onSelectedBuilding = { selectedBuilding = it },
-            onBuild = onBuild
-        )
-
-        selectedBuilding?.let { building ->
-            Card(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                .padding(bottom = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            selectedBuilding?.let { building ->
+                BuildingInspector(
+                    building = building,
+                    canAfford = gameState.money >= building.cost,
+                    onBuild = { onBuild(building) }
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            GameBuildBar(
+                buildingCatalog = buildingCatalog,
+                selectedBuilding = selectedBuilding,
+                onSelectedBuilding = { selectedBuilding = it },
+                onBuild = onBuild
+            )
+        }
+    }
+}
+
+@Composable
+private fun GameTopBar(
+    gameState: GameState,
+    onBack: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.background(Color.Black.copy(alpha = 0.4f), MaterialTheme.shapes.small)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(building.title, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Asset: ${building.assetPath}", fontSize = 12.sp)
-                    Text("Cost: ₹${building.cost}", fontSize = 12.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { onBuild(building) },
-                        modifier = Modifier.fillMaxWidth()
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+            }
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column {
+                Text(
+                    text = gameState.cityName.uppercase(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp,
+                    letterSpacing = 1.sp
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = gameState.rank,
+                        color = Color(0xFF58DBB8),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "LVL ${gameState.sustainabilityScore}",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    // Level / Smart Score bar
+                    Box(
+                        modifier = Modifier
+                            .width(60.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color.White.copy(alpha = 0.1f))
                     ) {
-                        Text("Build")
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(gameState.sustainabilityScore / 100f)
+                                .fillMaxHeight()
+                                .background(Color(0xFF58DBB8))
+                        )
                     }
                 }
+            }
+        }
+
+        Surface(
+            color = Color.Black.copy(alpha = 0.6f),
+            shape = MaterialTheme.shapes.medium,
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF58DBB8).copy(alpha = 0.3f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                GamingStatItem(Icons.Default.MonetizationOn, "₹${gameState.money}", Color(0xFFFFD700))
+                GamingStatItem(Icons.Default.People, "${gameState.population}", Color.White)
+                GamingStatItem(
+                    icon = Icons.Default.SentimentSatisfied,
+                    value = "${gameState.happiness}%",
+                    color = if (gameState.happiness > 50) Color(0xFF58DBB8) else Color(0xFFFF4B4B)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun GameHud(
-    modifier: Modifier = Modifier,
-    gameState: GameState,
-    activeGoal: String
+private fun GamingStatItem(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun NewsTicker(
+    news: String
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
-        shape = MaterialTheme.shapes.extraLarge
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 48.dp),
+        color = Color(0xFFFF4B4B).copy(alpha = 0.15f),
+        shape = RoundedCornerShape(4.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF4B4B).copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 4.dp, horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "SYSTEM BROADCAST",
+                color = Color(0xFFFF4B4B),
+                fontWeight = FontWeight.Black,
+                fontSize = 9.sp,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            Text(
+                text = news,
+                color = Color.White,
+                fontSize = 11.sp,
+                maxLines = 1,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun GoalTracker(
+    modifier: Modifier = Modifier,
+    activeGoal: String
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = "MISSION",
+            color = Color(0xFF58DBB8).copy(alpha = 0.7f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 2.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Surface(
+            color = Color.Black.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 12.dp, bottomEnd = 12.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF58DBB8).copy(alpha = 0.4f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = Color(0xFF58DBB8), modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = activeGoal,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier.widthIn(max = 160.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BuildingInspector(
+    building: BuildingDefinition,
+    canAfford: Boolean,
+    onBuild: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .width(280.dp)
+            .padding(horizontal = 16.dp),
+        color = Color(0xFF0A1929).copy(alpha = 0.9f),
+        shape = MaterialTheme.shapes.large,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -277,96 +407,53 @@ private fun GameHud(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${gameState.cityName} - ${gameState.rank}",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black
+                    text = building.title.uppercase(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp
                 )
                 Text(
-                    text = "Smart Score: ${gameState.sustainabilityScore}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                    text = building.category.displayName,
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 9.sp
                 )
             }
             
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.padding(vertical = 4.dp)
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SmallStat(Icons.Default.People, building.populationImpact.toString(), Color.White)
+                SmallStat(Icons.Default.SentimentSatisfied, "+${building.happinessImpact}", Color(0xFF58DBB8))
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Button(
+                onClick = onBuild,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = canAfford,
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (canAfford) Color(0xFF58DBB8) else Color.Gray.copy(alpha = 0.5f),
+                    contentColor = Color(0xFF020811)
+                )
             ) {
                 Text(
-                    text = "Goal: $activeGoal",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    text = if (canAfford) "DEPLOY (₹${building.cost})" else "INSUFFICIENT FUNDS",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 12.sp
                 )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatChip("₹${gameState.money}", "Money")
-                StatChip("${gameState.population}", "Population")
-                StatChip("${gameState.happiness}%", "Happiness")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatChip("${gameState.water}%", "Water")
-                    StatChip("${gameState.power}%", "Power")
-                    StatChip("${gameState.pollution}%", "Pollution")
-                }
-                
-                val feedback = when {
-                    gameState.happiness > 80 -> "😊"
-                    gameState.happiness > 60 -> "🙂"
-                    gameState.happiness > 40 -> "😐"
-                    else -> "☹️"
-                }
-                Text(feedback, fontSize = 24.sp)
             }
         }
     }
 }
 
 @Composable
-private fun StatChip(value: String, label: String) {
-    AssistChip(onClick = {}, label = { Text("$label: $value") })
-}
-
-@Composable
-private fun NewsTicker(
-    modifier: Modifier = Modifier,
-    news: String
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        color = Color.Black.copy(alpha = 0.7f),
-        shape = MaterialTheme.shapes.small
-    ) {
-        Row(
-            modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "LIVE NEWS:",
-                color = Color.Red,
-                fontWeight = FontWeight.Bold,
-                fontSize = 10.sp,
-                modifier = Modifier.padding(end = 8.dp)
-            )
-            Text(
-                text = news,
-                color = Color.White,
-                fontSize = 11.sp,
-                maxLines = 1
-            )
-        }
+private fun SmallStat(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = color.copy(alpha = 0.7f), modifier = Modifier.size(12.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(value, color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -382,53 +469,77 @@ private fun GameBuildBar(
     var selectedCategory by remember { mutableStateOf(categories.firstOrNull()) }
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        color = Color(0xFF020811).copy(alpha = 0.85f),
         shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 6.dp
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
     ) {
         Column(modifier = Modifier.padding(bottom = 8.dp)) {
+            // Category Selector
             LazyRow(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(categories) { category ->
                     val isSelected = selectedCategory == category
-                    AssistChip(
-                        onClick = { selectedCategory = category },
-                        label = { Text(category.displayName, fontSize = 11.sp) },
-                        colors = if (isSelected) {
-                            AssistChipDefaults.assistChipColors(
-                                labelColor = MaterialTheme.colorScheme.primary,
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            )
-                        } else {
-                            AssistChipDefaults.assistChipColors()
-                        }
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(if (isSelected) Color(0xFF58DBB8).copy(alpha = 0.2f) else Color.Transparent)
+                            .clickable { selectedCategory = category }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = category.displayName.uppercase(),
+                            color = if (isSelected) Color(0xFF58DBB8) else Color.White.copy(alpha = 0.6f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp
+                        )
+                    }
                 }
             }
 
+            // Building Selector
             LazyRow(
                 modifier = Modifier.padding(horizontal = 12.dp),
                 contentPadding = PaddingValues(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(buildingCatalog.filter { it.category == selectedCategory }) { building ->
                     val selected = selectedBuilding?.id == building.id
-                    Button(
-                        onClick = {
-                            onSelectedBuilding(building)
-                        },
-                        colors = if (selected) {
-                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                        } else {
-                            ButtonDefaults.buttonColors()
-                        }
+                    val color = Color(0xFF58DBB8)
+                    
+                    Surface(
+                        onClick = { onSelectedBuilding(building) },
+                        modifier = Modifier
+                            .width(100.dp)
+                            .height(60.dp),
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (selected) color.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f),
+                        border = if (selected) androidx.compose.foundation.BorderStroke(2.dp, color) else null
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(building.title, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                            Text("₹${building.cost}", fontSize = 10.sp)
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = building.title,
+                                color = if (selected) color else Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = "₹${building.cost}",
+                                color = if (selected) color.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.5f),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }

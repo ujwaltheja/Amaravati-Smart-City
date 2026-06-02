@@ -102,6 +102,15 @@ object BuildingCatalog {
                 cost = 8000,
                 happinessImpact = 10,
                 sustainabilityImpact = 8
+            ),
+            BuildingDefinition(
+                id = "utility-water-pump",
+                category = BuildingCategory.Utilities,
+                title = "Water Treatment",
+                assetPath = pick("water", "pump", "tank", "buoy"),
+                cost = 3200,
+                happinessImpact = 2,
+                sustainabilityImpact = 5
             )
         )
     }
