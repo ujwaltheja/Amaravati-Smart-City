@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.material)
+    implementation(libs.appcompat)
     implementation(libs.moshi.kotlin)
     implementation(libs.okhttp)
     testImplementation(libs.androidx.core)

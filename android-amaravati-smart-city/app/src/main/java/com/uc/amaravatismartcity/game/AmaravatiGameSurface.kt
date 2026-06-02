@@ -103,6 +103,23 @@ fun AmaravatiGameSurface(
         }
     }
 
+    val onBuild: (BuildingDefinition) -> Unit = { building ->
+        if (gameState.money >= building.cost && building.assetPath.isNotBlank()) {
+            val index = placedBuildings.size
+            val offset = (index % 5) - 2
+            placedBuildings += PlacedBuilding(
+                id = System.currentTimeMillis(),
+                definition = building,
+                position = Position((offset * 2.25f), 0f, -8f - (index / 5) * 2.25f),
+                scale = 1.1f
+            )
+            viewModel.updateMoney(-building.cost)
+            viewModel.updatePopulation(building.populationImpact)
+            viewModel.updateHappiness(building.happinessImpact)
+            viewModel.updateSustainability(building.sustainabilityImpact)
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -130,10 +147,9 @@ fun AmaravatiGameSurface(
                                 modelLoader.createModelInstance(assetFileLocation = building.definition.assetPath)
                             },
                             scaleToUnits = building.scale,
-                            centerOrigin = Position(0f, 0f, 0f)
-                        ).apply {
+                            centerOrigin = Position(0f, 0f, 0f),
                             position = building.position
-                        }
+                        )
                     }
                 }
             }
@@ -154,22 +170,7 @@ fun AmaravatiGameSurface(
             buildingCatalog = buildingCatalog,
             selectedBuilding = selectedBuilding,
             onSelectedBuilding = { selectedBuilding = it },
-            onBuild = { building ->
-                if (gameState.money >= building.cost && building.assetPath.isNotBlank()) {
-                    val index = placedBuildings.size
-                    val offset = (index % 5) - 2
-                    placedBuildings += PlacedBuilding(
-                        id = System.currentTimeMillis(),
-                        definition = building,
-                        position = Position((offset * 2.25f), 0f, -8f - (index / 5) * 2.25f),
-                        scale = 1.1f
-                    )
-                    viewModel.updateMoney(-building.cost)
-                    viewModel.updatePopulation(building.populationImpact)
-                    viewModel.updateHappiness(building.happinessImpact)
-                    viewModel.updateSustainability(building.sustainabilityImpact)
-                }
-            }
+            onBuild = onBuild
         )
 
         selectedBuilding?.let { building ->

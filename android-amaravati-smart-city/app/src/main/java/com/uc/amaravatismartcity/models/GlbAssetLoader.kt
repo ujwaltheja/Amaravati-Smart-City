@@ -1,6 +1,7 @@
 package com.uc.amaravatismartcity.models
 
 import io.github.sceneview.loaders.ModelLoader
+import io.github.sceneview.math.Position
 import io.github.sceneview.node.ModelNode
 
 /**
@@ -18,7 +19,7 @@ object GlbAssetLoader {
         return ModelNode(
             modelInstance = modelLoader.createModelInstance(assetFileLocation = assetPath),
             scaleToUnits = scaleToUnits,
-            centerOrigin = true
+            centerOrigin = Position(0f, 0f, 0f)
         )
     }
 }
