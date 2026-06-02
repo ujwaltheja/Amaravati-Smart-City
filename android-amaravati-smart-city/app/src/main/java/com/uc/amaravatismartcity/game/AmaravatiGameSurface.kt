@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -72,6 +73,8 @@ fun AmaravatiGameSurface(
     val modelLoader = rememberModelLoader(engine)
     val cameraManipulator = rememberCameraManipulator()
     val gameState by viewModel.gameState.collectAsStateWithLifecycle()
+    val currentNews by viewModel.currentNews.collectAsStateWithLifecycle()
+    val activeGoal by viewModel.activeGoal.collectAsStateWithLifecycle()
 
     val placedBuildings = remember {
         mutableStateListOf<PlacedBuilding>()
@@ -81,12 +84,28 @@ fun AmaravatiGameSurface(
     }
 
     LaunchedEffect(Unit) {
+        val newsItems = listOf(
+            "New IT park planned for the city center.",
+            "Citizen happiness is on the rise!",
+            "Sustainability initiative launched: More green spaces needed.",
+            "Water supply stabilized in all sectors.",
+            "Traffic congestion reported near the government node.",
+            "New residents moving into the city every day."
+        )
+        var newsIndex = 0
         while (true) {
             delay(2500)
             val currentState = viewModel.gameState.value
             viewModel.updateMoney((currentState.population * 6L).coerceAtLeast(0L))
             viewModel.updateHappiness(if (currentState.pollution > 60) -1 else 1)
             viewModel.updatePollution(if (currentState.population > 300) 1 else 0)
+            viewModel.recalculateSmartScore()
+            viewModel.checkGoals(currentState)
+            
+            if (System.currentTimeMillis() % 10000 < 2500) {
+                viewModel.updateNews(newsItems[newsIndex])
+                newsIndex = (newsIndex + 1) % newsItems.size
+            }
         }
     }
 
@@ -139,6 +158,16 @@ fun AmaravatiGameSurface(
             modelLoader = modelLoader,
             cameraManipulator = cameraManipulator
         ) {
+            // Add a ground plane
+            ModelNode(
+                modelInstance = modelLoader.createModelInstance(
+                    assetFileLocation = "models/Roads and Bridges/road-square.glb"
+                ),
+                scaleToUnits = 50f,
+                position = Position(0f, -0.1f, -10f),
+                centerOrigin = Position(0f, 0f, 0f)
+            )
+
             placedBuildings.forEach { building ->
                 key(building.id) {
                     if (building.definition.assetPath.isNotBlank()) {
@@ -158,8 +187,16 @@ fun AmaravatiGameSurface(
         GameHud(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(12.dp),
-            gameState = gameState
+                .padding(top = 48.dp, start = 12.dp, end = 12.dp),
+            gameState = gameState,
+            activeGoal = activeGoal
+        )
+
+        NewsTicker(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 12.dp),
+            news = currentNews
         )
 
         GameBuildBar(
@@ -203,7 +240,8 @@ fun AmaravatiGameSurface(
 @Composable
 private fun GameHud(
     modifier: Modifier = Modifier,
-    gameState: GameState
+    gameState: GameState,
+    activeGoal: String
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -211,12 +249,38 @@ private fun GameHud(
         shape = MaterialTheme.shapes.extraLarge
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = gameState.cityName,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black
-            )
-            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = gameState.cityName,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = "Smart Score: ${gameState.sustainabilityScore}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.padding(vertical = 4.dp)
+            ) {
+                Text(
+                    text = "Goal: $activeGoal",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatChip("₹${gameState.money}", "Money")
                 StatChip("${gameState.population}", "Population")
@@ -227,7 +291,6 @@ private fun GameHud(
                 StatChip("${gameState.water}%", "Water")
                 StatChip("${gameState.power}%", "Power")
                 StatChip("${gameState.pollution}%", "Pollution")
-                StatChip("${gameState.sustainabilityScore}", "Sustainability")
             }
         }
     }
@@ -236,6 +299,39 @@ private fun GameHud(
 @Composable
 private fun StatChip(value: String, label: String) {
     AssistChip(onClick = {}, label = { Text("$label: $value") })
+}
+
+@Composable
+private fun NewsTicker(
+    modifier: Modifier = Modifier,
+    news: String
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        color = Color.Black.copy(alpha = 0.7f),
+        shape = MaterialTheme.shapes.small
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 4.dp, horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "LIVE NEWS:",
+                color = Color.Red,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            Text(
+                text = news,
+                color = Color.White,
+                fontSize = 11.sp,
+                maxLines = 1
+            )
+        }
+    }
 }
 
 @Composable
@@ -260,7 +356,10 @@ private fun GameBuildBar(
             items(buildingCatalog) { building ->
                 val selected = selectedBuilding?.id == building.id
                 Button(
-                    onClick = { onSelectedBuilding(building) }
+                    onClick = {
+                        onSelectedBuilding(building)
+                        onBuild(building)
+                    }
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(building.title, fontWeight = FontWeight.SemiBold)

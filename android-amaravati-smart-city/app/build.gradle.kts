@@ -12,7 +12,7 @@ android {
     defaultConfig {
         applicationId = "com.uc.amaravatismartcity"
         minSdk = 29
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -22,6 +22,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Debug signing used here so `assembleRelease` produces a runnable APK without a real keystore.
+            // Replace with a proper release signingConfig before publishing to Play Store.
             signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

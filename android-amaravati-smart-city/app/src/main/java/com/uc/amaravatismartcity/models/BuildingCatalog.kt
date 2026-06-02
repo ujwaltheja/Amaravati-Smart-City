@@ -40,6 +40,25 @@ object BuildingCatalog {
                 sustainabilityImpact = 1
             ),
             BuildingDefinition(
+                id = "emergency-hospital",
+                category = BuildingCategory.Emergency,
+                title = "City Hospital",
+                assetPath = pick("ambulance", "hospital", "medical"),
+                cost = 3500,
+                happinessImpact = 8,
+                sustainabilityImpact = 2
+            ),
+            BuildingDefinition(
+                id = "education-school",
+                category = BuildingCategory.Education,
+                title = "Smart School",
+                assetPath = pick("school", "education", "university"),
+                cost = 2800,
+                populationImpact = 5,
+                happinessImpact = 6,
+                sustainabilityImpact = 3
+            ),
+            BuildingDefinition(
                 id = "infrastructure-road",
                 category = BuildingCategory.Infrastructure,
                 title = "Infrastructure",

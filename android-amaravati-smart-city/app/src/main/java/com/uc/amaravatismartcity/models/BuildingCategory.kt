@@ -6,5 +6,7 @@ enum class BuildingCategory(val displayName: String) {
     Government("Government"),
     Infrastructure("Infrastructure"),
     GreenSpace("Green Spaces"),
-    Riverfront("Riverfront")
+    Riverfront("Riverfront"),
+    Emergency("Emergency Services"),
+    Education("Education")
 }
