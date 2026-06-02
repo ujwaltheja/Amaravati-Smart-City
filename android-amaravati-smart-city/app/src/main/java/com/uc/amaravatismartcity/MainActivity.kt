@@ -12,14 +12,16 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.uc.amaravatismartcity.navigation.AppRoute
-import com.uc.amaravatismartcity.ui.screens.MainMenuScreen
+import com.uc.amaravatismartcity.ui.screens.AboutScreen
 import com.uc.amaravatismartcity.ui.screens.CityViewScreen
+import com.uc.amaravatismartcity.ui.screens.MainMenuScreen
 import com.uc.amaravatismartcity.ui.theme.AmaravatiSmartCityTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             AmaravatiSmartCityTheme {
                 Surface(
@@ -35,15 +37,18 @@ class MainActivity : ComponentActivity() {
                             entry<AppRoute.MainMenu> {
                                 MainMenuScreen(
                                     onNewGame = { backStack.add(AppRoute.CityView) },
-                                    onAbout = { /* TODO */ }
+                                    onAbout = { backStack.add(AppRoute.Dashboard) }
                                 )
                             }
                             entry<AppRoute.CityView> {
                                 CityViewScreen()
                             }
                             entry<AppRoute.Dashboard> {
-                                // Placeholder for Dashboard
-                                Surface(color = MaterialTheme.colorScheme.secondary) { }
+                                AboutScreen(
+                                    onStartGame = {
+                                        backStack.add(AppRoute.CityView)
+                                    }
+                                )
                             }
                         }
                     )

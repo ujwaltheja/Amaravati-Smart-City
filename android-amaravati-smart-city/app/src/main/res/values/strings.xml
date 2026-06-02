@@ -1,3 +1,8 @@
 <resources>
-    <string name="app_name">Amaravati Smart City</string>
+    <string name="app_name">అమరావతి రైజింగ్</string>
+    <string name="menu_start_game">కొత్త నగరం ప్రారంభించండి</string>
+    <string name="menu_continue">కొనసాగించండి</string>
+    <string name="menu_build_city">స్మార్ట్ సిటీ నిర్మించండి</string>
+    <string name="menu_language_hint">తెలుగు / English</string>
+    <string name="menu_hero_subtitle">కృష్ణా నది తీరంలో ఆధునిక అమరావతి నగర నిర్మాణం</string>
 </resources>
