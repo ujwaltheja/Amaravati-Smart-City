@@ -73,10 +73,9 @@ fun AmaravatiGameSurface(
     val buildingCatalog = remember(assetPaths) { BuildingCatalog.defaultCatalog(assetPaths) }
     val engine = rememberEngine()
     val modelLoader = rememberModelLoader(engine)
-    // Better starting camera for realistic city overview (looking over the riverfront grid)
+    // Strong overhead starting view for realistic city building
     val cameraManipulator = rememberCameraManipulator(
-        orbitHomePosition = io.github.sceneview.math.Position(0f, 22f, -26f),
-        target = io.github.sceneview.math.Position(0f, 0.8f, 1.5f)
+        orbitHomePosition = io.github.sceneview.math.Position(-1.5f, 19f, -22f)
     )
 
     val gameState by viewModel.gameState.collectAsStateWithLifecycle()
