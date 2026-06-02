@@ -11,5 +11,6 @@ data class GameState(
     val power: Int = 100, // Supply percentage
     val pollution: Int = 10, // Percentage
     val sustainabilityScore: Int = 50, // 0-100
-    val cityName: String = "Amaravati"
+    val cityName: String = "Amaravati",
+    val rank: String = "Rising Settlement"
 )

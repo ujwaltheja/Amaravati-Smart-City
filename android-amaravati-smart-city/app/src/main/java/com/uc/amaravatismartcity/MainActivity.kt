@@ -41,7 +41,9 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             entry<AppRoute.CityView> {
-                                CityViewScreen()
+                                CityViewScreen(
+                                    onBack = { backStack.removeLastOrNull() }
+                                )
                             }
                             entry<AppRoute.Dashboard> {
                                 AboutScreen(

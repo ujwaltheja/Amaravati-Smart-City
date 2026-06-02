@@ -7,7 +7,8 @@ import com.uc.amaravatismartcity.game.GameViewModel
 
 @Composable
 fun CityViewScreen(
-    viewModel: GameViewModel = viewModel()
+    viewModel: GameViewModel = viewModel(),
+    onBack: () -> Unit = {}
 ) {
-    AmaravatiGameSurface(viewModel = viewModel)
+    AmaravatiGameSurface(viewModel = viewModel, onBack = onBack)
 }

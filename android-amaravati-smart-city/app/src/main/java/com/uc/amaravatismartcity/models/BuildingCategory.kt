@@ -8,5 +8,7 @@ enum class BuildingCategory(val displayName: String) {
     GreenSpace("Green Spaces"),
     Riverfront("Riverfront"),
     Emergency("Emergency Services"),
-    Education("Education")
+    Education("Education"),
+    Industrial("Industrial Zone"),
+    Transport("Public Transport")
 }

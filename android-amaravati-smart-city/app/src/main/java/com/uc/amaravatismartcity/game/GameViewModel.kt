@@ -21,6 +21,17 @@ class GameViewModel : ViewModel() {
     }
 
     fun checkGoals(state: GameState) {
+        val newRank = when {
+            state.population >= 2000 -> "Metropolis"
+            state.population >= 1000 -> "Major City"
+            state.population >= 500 -> "Growing Town"
+            else -> "Rising Settlement"
+        }
+        if (newRank != state.rank) {
+            _gameState.update { it.copy(rank = newRank) }
+            _currentNews.value = "PROMOTION: Amaravati is now a $newRank!"
+        }
+
         if (state.population >= 100 && _activeGoal.value.contains("100 people")) {
             _activeGoal.value = "Reach 80% Happiness by adding Green Spaces."
             _currentNews.value = "GOAL REACHED: Population milestone met!"

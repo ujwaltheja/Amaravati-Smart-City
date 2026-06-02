@@ -15,10 +15,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,7 +68,8 @@ private data class PlacedBuilding(
 @Composable
 fun AmaravatiGameSurface(
     modifier: Modifier = Modifier,
-    viewModel: GameViewModel = viewModel()
+    viewModel: GameViewModel = viewModel(),
+    onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val assetPaths by produceState(initialValue = emptyList<String>(), context) {
@@ -99,6 +106,11 @@ fun AmaravatiGameSurface(
             viewModel.updateMoney((currentState.population * 6L).coerceAtLeast(0L))
             viewModel.updateHappiness(if (currentState.pollution > 60) -1 else 1)
             viewModel.updatePollution(if (currentState.population > 300) 1 else 0)
+            
+            if (currentState.happiness > 75) {
+                viewModel.updatePopulation(2)
+            }
+
             viewModel.recalculateSmartScore()
             viewModel.checkGoals(currentState)
             
@@ -158,27 +170,24 @@ fun AmaravatiGameSurface(
             modelLoader = modelLoader,
             cameraManipulator = cameraManipulator
         ) {
-            // Add a ground plane
-            ModelNode(
-                modelInstance = modelLoader.createModelInstance(
-                    assetFileLocation = "models/Roads and Bridges/road-square.glb"
-                ),
-                scaleToUnits = 50f,
-                position = Position(0f, -0.1f, -10f),
-                centerOrigin = Position(0f, 0f, 0f)
-            )
-
             placedBuildings.forEach { building ->
                 key(building.id) {
                     if (building.definition.assetPath.isNotBlank()) {
-                        ModelNode(
-                            modelInstance = remember(building.id, building.definition.assetPath) {
+                        val modelInstance = remember(building.id, building.definition.assetPath) {
+                            try {
                                 modelLoader.createModelInstance(assetFileLocation = building.definition.assetPath)
-                            },
-                            scaleToUnits = building.scale,
-                            centerOrigin = Position(0f, 0f, 0f),
-                            position = building.position
-                        )
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        if (modelInstance != null) {
+                            ModelNode(
+                                modelInstance = modelInstance,
+                                scaleToUnits = building.scale,
+                                centerOrigin = Position(0f, 0f, 0f),
+                                position = building.position
+                            )
+                        }
                     }
                 }
             }
@@ -198,6 +207,19 @@ fun AmaravatiGameSurface(
                 .padding(top = 12.dp),
             news = currentNews
         )
+
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 4.dp, start = 4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowBack,
+                contentDescription = "Back to Menu",
+                tint = Color.White
+            )
+        }
 
         GameBuildBar(
             modifier = Modifier
@@ -255,7 +277,7 @@ private fun GameHud(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = gameState.cityName,
+                    text = "${gameState.cityName} - ${gameState.rank}",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black
                 )
@@ -287,10 +309,24 @@ private fun GameHud(
                 StatChip("${gameState.happiness}%", "Happiness")
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatChip("${gameState.water}%", "Water")
-                StatChip("${gameState.power}%", "Power")
-                StatChip("${gameState.pollution}%", "Pollution")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatChip("${gameState.water}%", "Water")
+                    StatChip("${gameState.power}%", "Power")
+                    StatChip("${gameState.pollution}%", "Pollution")
+                }
+                
+                val feedback = when {
+                    gameState.happiness > 80 -> "😊"
+                    gameState.happiness > 60 -> "🙂"
+                    gameState.happiness > 40 -> "😐"
+                    else -> "☹️"
+                }
+                Text(feedback, fontSize = 24.sp)
             }
         }
     }
@@ -342,30 +378,57 @@ private fun GameBuildBar(
     onSelectedBuilding: (BuildingDefinition) -> Unit,
     onBuild: (BuildingDefinition) -> Unit
 ) {
+    val categories = remember(buildingCatalog) { buildingCatalog.map { it.category }.distinct() }
+    var selectedCategory by remember { mutableStateOf(categories.firstOrNull()) }
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         shape = MaterialTheme.shapes.extraLarge,
         tonalElevation = 6.dp
     ) {
-        LazyRow(
-            modifier = Modifier.padding(12.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(buildingCatalog) { building ->
-                val selected = selectedBuilding?.id == building.id
-                Button(
-                    onClick = {
-                        onSelectedBuilding(building)
-                        onBuild(building)
-                    }
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(building.title, fontWeight = FontWeight.SemiBold)
-                        Text("₹${building.cost}", fontSize = 11.sp)
-                        if (selected) {
-                            Text("Selected", fontSize = 10.sp)
+        Column(modifier = Modifier.padding(bottom = 8.dp)) {
+            LazyRow(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(categories) { category ->
+                    val isSelected = selectedCategory == category
+                    AssistChip(
+                        onClick = { selectedCategory = category },
+                        label = { Text(category.displayName, fontSize = 11.sp) },
+                        colors = if (isSelected) {
+                            AssistChipDefaults.assistChipColors(
+                                labelColor = MaterialTheme.colorScheme.primary,
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            )
+                        } else {
+                            AssistChipDefaults.assistChipColors()
+                        }
+                    )
+                }
+            }
+
+            LazyRow(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(buildingCatalog.filter { it.category == selectedCategory }) { building ->
+                    val selected = selectedBuilding?.id == building.id
+                    Button(
+                        onClick = {
+                            onSelectedBuilding(building)
+                        },
+                        colors = if (selected) {
+                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        }
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(building.title, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Text("₹${building.cost}", fontSize = 10.sp)
                         }
                     }
                 }

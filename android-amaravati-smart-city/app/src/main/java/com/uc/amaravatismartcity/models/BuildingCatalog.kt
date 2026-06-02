@@ -83,6 +83,25 @@ object BuildingCatalog {
                 cost = 2500,
                 happinessImpact = 4,
                 sustainabilityImpact = 3
+            ),
+            BuildingDefinition(
+                id = "industrial-factory",
+                category = BuildingCategory.Industrial,
+                title = "Industrial Zone",
+                assetPath = pick("factory", "industrial", "chimney", "tank"),
+                cost = 6000,
+                populationImpact = 5,
+                happinessImpact = -2,
+                sustainabilityImpact = -5
+            ),
+            BuildingDefinition(
+                id = "transport-metro",
+                category = BuildingCategory.Transport,
+                title = "Metro Station",
+                assetPath = pick("metro", "train", "tram", "subway"),
+                cost = 8000,
+                happinessImpact = 10,
+                sustainabilityImpact = 8
             )
         )
     }
