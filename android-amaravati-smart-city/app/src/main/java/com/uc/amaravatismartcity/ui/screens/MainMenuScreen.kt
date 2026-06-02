@@ -71,42 +71,47 @@ fun MainMenuScreen(
                         fontWeight = FontWeight.Black,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Amaravati Rising",
+                        text = "AMARAVATI RISING",
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 3.sp
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        text = "కృష్ణా నది తీరంలో స్మార్ట్ సిటీని నిర్మించండి",
+                        text = "కృష్ణా నది తీరంలో వాస్తవిక స్మార్ట్ సిటీని నిర్మించండి",
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 16.sp
+                        fontSize = 15.sp
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Plan riverfront districts, manage resources, and grow a modern capital city.",
+                        text = "Build a living 3D city. Place real roads. Watch traffic flow. Shape the future capital.",
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                        fontSize = 12.5.sp,
+                        modifier = Modifier.padding(horizontal = 18.dp)
                     )
-                    Spacer(modifier = Modifier.height(28.dp))
+                    Spacer(modifier = Modifier.height(26.dp))
                     Button(
                         onClick = onNewGame,
                         modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 16.dp)
+                        contentPadding = PaddingValues(vertical = 15.dp),
+                        shape = RoundedCornerShape(14.dp)
                     ) {
-                        Text("కొత్త నగరం ప్రారంభించండి")
+                        Text("కొత్త నగరం ప్రారంభించండి  •  START BUILDING", fontWeight = FontWeight.Black)
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(9.dp))
                     OutlinedButton(
                         onClick = onAbout,
                         modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 16.dp)
+                        contentPadding = PaddingValues(vertical = 14.dp),
+                        shape = RoundedCornerShape(14.dp)
                     ) {
-                        Text("About / సమాచారం")
+                        Text("LEARN MORE  /  సమాచారం")
                     }
                 }
             }

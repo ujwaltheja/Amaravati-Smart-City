@@ -61,10 +61,10 @@ object BuildingCatalog {
             BuildingDefinition(
                 id = "infrastructure-road",
                 category = BuildingCategory.Infrastructure,
-                title = "Infrastructure",
-                assetPath = pick("road", "bridge", "metro", "infrastructure", "flyover"),
-                cost = 900,
-                sustainabilityImpact = 1
+                title = "Road Segment",
+                assetPath = pick("road-straight", "road-square", "road-bend", "tile-low", "bridge"),
+                cost = 850,
+                sustainabilityImpact = 2
             ),
             BuildingDefinition(
                 id = "green-park",

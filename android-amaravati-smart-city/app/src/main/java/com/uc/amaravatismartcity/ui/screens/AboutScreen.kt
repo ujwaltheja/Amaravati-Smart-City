@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun AboutScreen(
@@ -35,15 +36,16 @@ fun AboutScreen(
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "A smart city tycoon on the Krishna riverfront.",
-                modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
+                text = "A living 3D city builder on the Krishna riverfront.",
+                modifier = Modifier.padding(top = 12.dp, bottom = 18.dp),
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "The game uses Kotlin, Compose, Navigation 3, and SceneView for GLB-based 3D city building.",
-                modifier = Modifier.padding(horizontal = 16.dp),
-                textAlign = TextAlign.Center
+                text = "Realistic traffic. Day & night. Dynamic economy. Place authentic modular buildings, roads & citizens. Built with Kotlin + Compose + SceneView (Filament) 3D.",
+                modifier = Modifier.padding(horizontal = 18.dp),
+                textAlign = TextAlign.Center,
+                fontSize = 13.sp
             )
             Button(
                 onClick = onStartGame,
