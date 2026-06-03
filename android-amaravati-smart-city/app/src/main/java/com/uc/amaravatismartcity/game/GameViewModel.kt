@@ -77,10 +77,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     waste = current.waste,
                     pollution = current.pollution,
                     sustainabilityScore = current.sustainabilityScore,
+                    powerBalance = current.powerBalance,
+                    waterBalance = current.waterBalance,
+                    wasteBalance = current.wasteBalance,
+                    jobs = current.jobs,
+                    housingCapacity = current.housingCapacity,
+                    taxIncome = current.taxIncome,
+                    serviceCoverage = current.serviceCoverage,
+                    emergencyDelay = current.emergencyDelay,
                     cityName = current.cityName,
                     rank = current.rank,
                     dayTime = current.dayTime,
                     trafficDensity = current.trafficDensity,
+                    activeMissionIndex = current.activeMissionIndex,
+                    activeEmergency = current.activeEmergency,
+                    graphicsQuality = current.graphicsQuality,
                     totalBuildings = current.totalBuildings,
                     activeGoal = _activeGoal.value,
                     currentNews = _currentNews.value
@@ -119,10 +130,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         waste = savedState.waste,
                         pollution = savedState.pollution,
                         sustainabilityScore = savedState.sustainabilityScore,
+                        powerBalance = savedState.powerBalance,
+                        waterBalance = savedState.waterBalance,
+                        wasteBalance = savedState.wasteBalance,
+                        jobs = savedState.jobs,
+                        housingCapacity = savedState.housingCapacity,
+                        taxIncome = savedState.taxIncome,
+                        serviceCoverage = savedState.serviceCoverage,
+                        emergencyDelay = savedState.emergencyDelay,
                         cityName = savedState.cityName,
                         rank = savedState.rank,
                         dayTime = savedState.dayTime,
                         trafficDensity = savedState.trafficDensity,
+                        activeMissionIndex = savedState.activeMissionIndex,
+                        activeEmergency = savedState.activeEmergency,
+                        graphicsQuality = savedState.graphicsQuality,
                         totalBuildings = savedState.totalBuildings
                     )
                 }
@@ -156,7 +178,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun triggerRandomEvent() {
-        val event = eventPool.random()
+        val emergency = EmergencyType.entries.random()
+        val event = if (Random.nextFloat() < 0.45f) emergency.displayName else eventPool.random()
         _currentNews.value = event
         _events.update { (it + event).takeLast(4) }
 
@@ -182,33 +205,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 updateHappiness(3)
                 updateSustainability(2)
             }
+            event == emergency.displayName -> {
+                _gameState.update { it.copy(activeEmergency = emergency.displayName) }
+                updateHappiness(-2)
+                if (emergency == EmergencyType.Spill) updatePollution(8)
+                if (emergency == EmergencyType.Outage) updatePower(-10)
+            }
         }
         recalculateSmartScore()
     }
 
     fun checkGoals(state: GameState) {
-        val newRank = when {
-            state.population >= 4200 -> "Smart Metropolis"
-            state.population >= 1800 -> "Future City"
-            state.population >= 850 -> "Major Township"
-            state.population >= 380 -> "Growing District"
-            else -> "Rising Settlement"
-        }
+        val items = _placedItems.value
+        val graph = buildRoadGraph(items)
+        val newRank = rankForPopulation(state.population)
         if (newRank != state.rank) {
             _gameState.update { it.copy(rank = newRank) }
             _currentNews.value = "CITY UPGRADE: Amaravati is now a $newRank!"
         }
 
-        val goal = _activeGoal.value
-        if (state.population >= 280 && goal.contains("core infrastructure")) {
-            _activeGoal.value = "Improve liveability: Reach 85 Happiness with parks and services."
-            _currentNews.value = "MILESTONE: Foundational infrastructure in place."
-        } else if (state.happiness >= 85 && goal.contains("85 Happiness")) {
-            _activeGoal.value = "Expand public transport and reduce pollution below 25%."
-            _currentNews.value = "Citizens are thriving!"
-        } else if (state.pollution < 25 && state.trafficDensity < 55 && goal.contains("pollution")) {
-            _activeGoal.value = "Grow to 1200 citizens while maintaining sustainability."
-            _currentNews.value = "Clean air milestone achieved."
+        val missionIndex = state.activeMissionIndex.coerceIn(0, cityMissions.lastIndex)
+        val mission = cityMissions[missionIndex]
+        _activeGoal.value = "${mission.title}: ${mission.description}"
+        if (mission.isComplete(state, items, graph)) {
+            val next = (missionIndex + 1).coerceAtMost(cityMissions.lastIndex)
+            _gameState.update { it.copy(activeMissionIndex = next) }
+            _activeGoal.value = "${cityMissions[next].title}: ${cityMissions[next].description}"
+            _currentNews.value = "MISSION COMPLETE: ${mission.title}."
         }
     }
 
@@ -253,9 +276,47 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         updateTotalBuildings(_placedItems.value.size)
     }
 
+    fun placeBuilding(definition: BuildingDefinition, position: Position, rotationY: Float): Boolean {
+        val pos = snapToGrid(position)
+        val state = _gameState.value
+        if (state.money < definition.cost) {
+            _currentNews.value = "Insufficient funds for ${definition.title}."
+            return false
+        }
+        if (state.population < definition.unlockPopulation) {
+            _currentNews.value = "${definition.title} unlocks at ${definition.unlockPopulation} citizens."
+            return false
+        }
+        if (!canPlaceOnGrid(definition, pos, _placedItems.value)) {
+            _currentNews.value = "Placement blocked. Choose a clear grid tile."
+            return false
+        }
+
+        val id = System.currentTimeMillis()
+        addPlacedItem(PlacedItem(id = id, definition = definition, position = pos, rotationY = rotationY))
+        updateMoney(-definition.cost)
+        updatePopulation(definition.populationImpact)
+        updateHappiness(definition.happinessImpact)
+        updateSustainability(definition.sustainabilityImpact)
+        refreshCitySystems()
+        _currentNews.value = "${definition.title} placed on grid."
+        return true
+    }
+
     fun removePlacedItem(item: PlacedItem) {
         _placedItems.update { list -> list.filter { it.id != item.id } }
         updateTotalBuildings(_placedItems.value.size)
+    }
+
+    fun bulldoze(item: PlacedItem): Long {
+        removePlacedItem(item)
+        val refund = (item.definition.cost * if (item.definition.cost >= 8000) 0.35f else 0.5f).toLong()
+        updateMoney(refund)
+        updatePopulation(-item.definition.populationImpact)
+        updateHappiness((-item.definition.happinessImpact / 2).coerceAtMost(0))
+        refreshCitySystems()
+        _currentNews.value = "${item.definition.title} removed. Refunded ₹${refund}."
+        return refund
     }
 
     fun removeLastPlacedItem() {
@@ -272,6 +333,56 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun updateTraffic(delta: Int) {
         _gameState.update {
             it.copy(trafficDensity = (it.trafficDensity + delta).coerceIn(5, 95))
+        }
+    }
+
+    fun setGraphicsQuality(quality: Int) {
+        _gameState.update { it.copy(graphicsQuality = quality.coerceIn(0, 2)) }
+        _currentNews.value = when (quality.coerceIn(0, 2)) {
+            0 -> "Graphics set to Battery Saver."
+            2 -> "Graphics set to High Detail."
+            else -> "Graphics set to Balanced."
+        }
+    }
+
+    fun clearEmergency() {
+        val active = _gameState.value.activeEmergency
+        if (active.isBlank()) {
+            _currentNews.value = "No active emergency."
+            return
+        }
+        val graph = buildRoadGraph(_placedItems.value)
+        val hasEmergencyService = _placedItems.value.any { it.definition.category == BuildingCategory.Emergency }
+        val recoveryCost = if (graph.emergencyDelay > 70) 1400L else 650L
+        if (!hasEmergencyService) {
+            updateHappiness(-3)
+            _currentNews.value = "Emergency response failed. Build fire, police, or hospital coverage."
+            return
+        }
+        updateMoney(-recoveryCost)
+        updateHappiness(if (graph.emergencyDelay < 55) 4 else -1)
+        _gameState.update { it.copy(activeEmergency = "") }
+        _currentNews.value = "$active resolved. Recovery cost ₹$recoveryCost."
+    }
+
+    fun refreshCitySystems() {
+        val items = _placedItems.value
+        val balances = calculateBalances(items)
+        val graph = buildRoadGraph(items)
+        val coverage = serviceCoveragePercent(items)
+        _gameState.update {
+            it.copy(
+                powerBalance = balances.power,
+                waterBalance = balances.water,
+                wasteBalance = balances.waste,
+                jobs = balances.jobs,
+                housingCapacity = balances.housing,
+                taxIncome = balances.taxIncome,
+                serviceCoverage = coverage,
+                emergencyDelay = graph.emergencyDelay,
+                trafficDensity = graph.averageCongestion.coerceIn(5, 95),
+                totalBuildings = items.count { placed -> placed.definition.cost > 0 }
+            )
         }
     }
 
@@ -309,10 +420,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val current = _gameState.value
         val items = _placedItems.value
         val placedCount = items.size
+        val balances = calculateBalances(items)
+        val roadGraph = buildRoadGraph(items)
 
         updateDayTime(effDelta * 0.1f)
 
-        val incomePerSec = (current.population * 0.9 + placedCount * 28 + current.happiness * 1.8).toLong()
+        val incomePerSec = (balances.taxIncome / 12f + current.population * 0.28f + current.happiness * 1.2f).toLong()
         if (effDelta > 0) {
             val income = (incomePerSec * effDelta).toLong().coerceAtLeast(1)
             if (System.currentTimeMillis() - current.lastIncomeTick > 650) {
@@ -321,36 +434,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        val producers = items.filter { it.definition.powerImpact > 0 || it.definition.waterImpact > 0 }
-        val consumers = items.filter { it.definition.powerImpact < 0 || it.definition.waterImpact < 0 }
-
-        var connectedPowerCons = 0
-        var connectedWaterCons = 0
-        val totalPowerCons = consumers.sumOf { it.definition.powerImpact.coerceAtMost(0) }
-        val totalWaterCons = consumers.sumOf { it.definition.waterImpact.coerceAtMost(0) }
-
-        consumers.forEach { consumer ->
-            val isPowered = producers.any { p ->
-                p.definition.powerImpact > 0 && distSq(p.position, consumer.position) < 144f
-            }
-            val hasWater = producers.any { p ->
-                p.definition.waterImpact > 0 && distSq(p.position, consumer.position) < 144f
-            }
-
-            if (isPowered) connectedPowerCons += consumer.definition.powerImpact
-            if (hasWater) connectedWaterCons += consumer.definition.waterImpact
+        _gameState.update {
+            it.copy(
+                powerBalance = balances.power,
+                waterBalance = balances.water,
+                wasteBalance = balances.waste,
+                jobs = balances.jobs,
+                housingCapacity = balances.housing,
+                taxIncome = balances.taxIncome,
+                serviceCoverage = serviceCoveragePercent(items),
+                emergencyDelay = roadGraph.emergencyDelay,
+                trafficDensity = roadGraph.averageCongestion.coerceIn(5, 95),
+                totalBuildings = items.count { placed -> placed.definition.cost > 0 }
+            )
         }
 
-        val gridEff = if (totalPowerCons < 0) connectedPowerCons.toFloat() / totalPowerCons else 1f
-        val waterEff = if (totalWaterCons < 0) connectedWaterCons.toFloat() / totalWaterCons else 1f
-
-        val netPower = items.sumOf { it.definition.powerImpact }
-        val netWater = items.sumOf { it.definition.waterImpact }
-        val netWaste = items.sumOf { it.definition.wasteImpact }
-
-        val powerDrift = if (netPower >= 0 && gridEff > 0.75f) (if (current.power < 100) 1 else 0) else -1
-        val waterDrift = if (netWater >= 0 && waterEff > 0.75f) (if (current.water < 100) 1 else 0) else -1
-        val wasteDrift = if (netWaste > 0) 1 else if (netWaste < 0 && current.waste > 0) -1 else 0
+        val powerDrift = if (balances.power >= 0) (if (current.power < 100) 1 else 0) else -1
+        val waterDrift = if (balances.water >= 0) (if (current.water < 100) 1 else 0) else -1
+        val wasteDrift = if (balances.waste > 0) 1 else if (balances.waste < 0 && current.waste > 0) -1 else 0
 
         if (Random.nextFloat() < 0.3f * effDelta) {
             if (powerDrift != 0) updatePower(powerDrift)
@@ -358,29 +459,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (wasteDrift != 0) updateWaste(wasteDrift)
         }
 
-        if (_currentNews.value.contains("FIRE") || _currentNews.value.contains("Medical emergency")) {
-            val hasCoverage = when {
-                _currentNews.value.contains("FIRE") -> items.any {
-                    it.definition.id.contains("police") || it.definition.category == BuildingCategory.Emergency
-                }
-                else -> items.any {
-                    it.definition.id.contains("hospital") || it.definition.id.contains("ambulance")
-                }
-            }
-            if (!hasCoverage && Random.nextFloat() < 0.1f * effDelta) {
+        if (current.activeEmergency.isNotBlank()) {
+            val hasCoverage = items.any { it.definition.category == BuildingCategory.Emergency } && current.serviceCoverage > 25
+            if ((!hasCoverage || roadGraph.emergencyDelay > 70) && Random.nextFloat() < 0.12f * effDelta) {
                 updateHappiness(-1)
-                updateMoney(-150)
+                updateMoney(-220)
             }
         }
 
-        val targetTraffic = (28 + placedCount * 3 + if (current.pollution > 55) 18 else 0).coerceAtMost(92)
+        val targetTraffic = (roadGraph.averageCongestion + if (current.pollution > 55) 10 else 0).coerceAtMost(92)
         val trafficDrift = ((targetTraffic - current.trafficDensity) * 0.018f * effDelta).toInt()
         if (trafficDrift != 0) updateTraffic(trafficDrift)
 
         val pollutionDrift = when {
-            items.any { it.definition.id.contains("factory") } && current.pollution < 85 -> 1
+            balances.pollution > 20 && current.pollution < 85 -> 1
             current.waste > 60 -> 1
             current.trafficDensity > 75 -> 1
+            items.any { it.definition.category == BuildingCategory.GreenSpace } && current.pollution > 15 -> -1
             current.pollution > 20 && Random.nextFloat() < 0.2f -> -1
             else -> 0
         }
@@ -392,14 +487,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             current.waste > 70 -> -1
             current.pollution > 65 -> -1
             current.trafficDensity > 78 -> -1
-            gridEff < 0.65f -> -1
+            current.jobs < current.population / 3 -> -1
+            current.serviceCoverage < 25 && placedCount > 8 -> -1
             current.happiness < 55 && current.water > 80 && current.power > 80 -> 1
             current.dayTime in 7f..19f && Random.nextFloat() < 0.2f -> 1
             else -> 0
         }
         if (happyDrift != 0) updateHappiness(happyDrift)
 
-        if (current.happiness > 75 && current.power > 70 && current.water > 70 && current.population < 8000 && Random.nextFloat() < 0.5f) {
+        if (current.happiness > 75 && current.power > 70 && current.water > 70 && current.population < current.housingCapacity && Random.nextFloat() < 0.5f) {
             updatePopulation(1 + (placedCount / 8))
         } else if ((current.happiness < 35 || current.power < 20 || current.water < 20) && Random.nextFloat() < 0.3f) {
             updatePopulation(-1)
@@ -411,11 +507,5 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (Random.nextFloat() < 0.012f * effDelta) {
             triggerRandomEvent()
         }
-    }
-
-    private fun distSq(p1: Position, p2: Position): Float {
-        val dx = p1.x - p2.x
-        val dz = p1.z - p2.z
-        return dx * dx + dz * dz
     }
 }

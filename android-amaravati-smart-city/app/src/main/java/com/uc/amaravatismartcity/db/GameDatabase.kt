@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.uc.amaravatismartcity.db.entities.GameStateEntity
 import com.uc.amaravatismartcity.db.entities.PlacedItemEntity
 
-@Database(entities = [PlacedItemEntity::class, GameStateEntity::class], version = 2, exportSchema = false)
+@Database(entities = [PlacedItemEntity::class, GameStateEntity::class], version = 3, exportSchema = false)
 abstract class GameDatabase : RoomDatabase() {
     abstract fun gameDao(): GameDao
 
@@ -26,6 +26,22 @@ abstract class GameDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE game_state ADD COLUMN powerBalance INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN waterBalance INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN wasteBalance INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN jobs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN housingCapacity INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN taxIncome INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN serviceCoverage INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN emergencyDelay INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN activeMissionIndex INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN activeEmergency TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE game_state ADD COLUMN graphicsQuality INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         fun getDatabase(context: Context): GameDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -33,7 +49,7 @@ abstract class GameDatabase : RoomDatabase() {
                     GameDatabase::class.java,
                     "amaravati_city_db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                 INSTANCE = instance
                 instance

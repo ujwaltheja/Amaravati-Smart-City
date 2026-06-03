@@ -18,11 +18,13 @@ object BuildingCatalog {
                 title = "Suburban House",
                 assetPath = pick("house", "home"),
                 cost = 800,
+                housingCapacity = 8,
                 populationImpact = 8,
                 happinessImpact = 3,
                 powerImpact = -2,
                 waterImpact = -2,
-                wasteImpact = 1
+                wasteImpact = 1,
+                taxIncome = 55
             ),
             BuildingDefinition(
                 id = "residential-apartment",
@@ -30,11 +32,15 @@ object BuildingCatalog {
                 title = "Apartment Block",
                 assetPath = pick("apartment", "residential", "flat"),
                 cost = 2500,
+                width = 2,
+                depth = 2,
+                housingCapacity = 55,
                 populationImpact = 45,
                 happinessImpact = 1,
                 powerImpact = -10,
                 waterImpact = -8,
-                wasteImpact = 5
+                wasteImpact = 5,
+                taxIncome = 240
             ),
             BuildingDefinition(
                 id = "commercial-office",
@@ -42,11 +48,15 @@ object BuildingCatalog {
                 title = "Office Building",
                 assetPath = pick("building-a", "building-b", "building-c"),
                 cost = 3000,
+                width = 2,
+                depth = 2,
+                jobs = 35,
                 populationImpact = 5,
                 happinessImpact = 2,
                 powerImpact = -15,
                 waterImpact = -5,
-                wasteImpact = 4
+                wasteImpact = 4,
+                taxIncome = 520
             ),
             BuildingDefinition(
                 id = "commercial-skyscraper",
@@ -54,11 +64,15 @@ object BuildingCatalog {
                 title = "IT Skyscraper",
                 assetPath = pick("skyscraper-a", "skyscraper-b", "skyscraper-c"),
                 cost = 12000,
+                width = 3,
+                depth = 3,
+                jobs = 180,
                 populationImpact = 15,
                 happinessImpact = 5,
                 powerImpact = -45,
                 waterImpact = -25,
                 wasteImpact = 12,
+                taxIncome = 2600,
                 unlockPopulation = 500
             ),
             BuildingDefinition(
@@ -67,12 +81,17 @@ object BuildingCatalog {
                 title = "Secretariat",
                 assetPath = pick("building-skyscraper-d", "building-skyscraper-e"),
                 cost = 15000,
+                width = 3,
+                depth = 3,
+                jobs = 120,
                 happinessImpact = 10,
                 sustainabilityImpact = 5,
                 powerImpact = -50,
                 waterImpact = -30,
                 wasteImpact = 10,
-                unlockPopulation = 1000
+                taxIncome = 1800,
+                serviceCoverage = 8,
+                unlockPopulation = 1200
             ),
             BuildingDefinition(
                 id = "emergency-police",
@@ -80,10 +99,14 @@ object BuildingCatalog {
                 title = "Police Hub",
                 assetPath = pick("police", "building-f"),
                 cost = 4500,
+                width = 2,
+                depth = 2,
+                jobs = 28,
                 happinessImpact = 12,
                 powerImpact = -10,
                 waterImpact = -5,
                 wasteImpact = 2,
+                serviceCoverage = 7,
                 unlockPopulation = 150
             ),
             BuildingDefinition(
@@ -92,10 +115,14 @@ object BuildingCatalog {
                 title = "City Hospital",
                 assetPath = pick("ambulance", "medical", "building-g"),
                 cost = 7500,
+                width = 3,
+                depth = 2,
+                jobs = 85,
                 happinessImpact = 20,
                 powerImpact = -30,
                 waterImpact = -25,
                 wasteImpact = 10,
+                serviceCoverage = 9,
                 unlockPopulation = 300
             ),
             BuildingDefinition(
@@ -104,9 +131,14 @@ object BuildingCatalog {
                 title = "Logistics Hub",
                 assetPath = pick("building-o", "building-p"),
                 cost = 3500,
+                width = 2,
+                depth = 2,
+                jobs = 55,
                 powerImpact = -10,
                 waterImpact = -5,
-                wasteImpact = 8
+                wasteImpact = 8,
+                pollutionImpact = 8,
+                taxIncome = 780
             ),
             BuildingDefinition(
                 id = "industrial-factory-heavy",
@@ -114,6 +146,9 @@ object BuildingCatalog {
                 title = "Heavy Industry",
                 assetPath = pick("chimney-large", "building-r", "building-s"),
                 cost = 9000,
+                width = 3,
+                depth = 3,
+                jobs = 140,
                 populationImpact = 5,
                 happinessImpact = -8,
                 sustainabilityImpact = -10,
@@ -121,6 +156,7 @@ object BuildingCatalog {
                 waterImpact = -60,
                 wasteImpact = 40,
                 pollutionImpact = 35,
+                taxIncome = 2200,
                 unlockPopulation = 400
             ),
             BuildingDefinition(
@@ -129,8 +165,11 @@ object BuildingCatalog {
                 title = "Solar Grid",
                 assetPath = pick("solar", "panel"),
                 cost = 5500,
+                width = 3,
+                depth = 2,
                 sustainabilityImpact = 12,
-                powerImpact = 120
+                powerImpact = 120,
+                serviceCoverage = 9
             ),
             BuildingDefinition(
                 id = "utility-water-tower",
@@ -138,8 +177,11 @@ object BuildingCatalog {
                 title = "Water Tower",
                 assetPath = pick("tank", "tower"),
                 cost = 4000,
+                width = 2,
+                depth = 2,
                 waterImpact = 90,
-                powerImpact = -5
+                powerImpact = -5,
+                serviceCoverage = 8
             ),
             BuildingDefinition(
                 id = "utility-recycling",
@@ -147,19 +189,56 @@ object BuildingCatalog {
                 title = "Recycling Plant",
                 assetPath = pick("waste", "recycling"),
                 cost = 6000,
+                width = 2,
+                depth = 2,
+                jobs = 45,
                 sustainabilityImpact = 8,
                 wasteImpact = -100,
                 powerImpact = -20,
+                serviceCoverage = 8,
                 unlockPopulation = 200
             ),
             BuildingDefinition(
-                id = "infrastructure-road",
+                id = "road-basic",
                 category = BuildingCategory.Infrastructure,
-                title = "Smart Road",
+                title = "Basic Road",
                 assetPath = pick("road-straight", "road-bend"),
                 cost = 500,
-                sustainabilityImpact = 1,
-                powerImpact = -1
+                roadUpgrade = RoadUpgrade.Basic,
+                taxIncome = 20
+            ),
+            BuildingDefinition(
+                id = "road-smart",
+                category = BuildingCategory.Infrastructure,
+                title = "Smart Road",
+                assetPath = pick("road-straight", "road-intersection-line"),
+                cost = 900,
+                roadUpgrade = RoadUpgrade.Smart,
+                sustainabilityImpact = 2,
+                powerImpact = -1,
+                unlockPopulation = 150
+            ),
+            BuildingDefinition(
+                id = "road-bus-lane",
+                category = BuildingCategory.Infrastructure,
+                title = "Bus Lane",
+                assetPath = pick("road-straight-barrier", "road-side"),
+                cost = 1600,
+                roadUpgrade = RoadUpgrade.BusLane,
+                sustainabilityImpact = 4,
+                powerImpact = -1,
+                unlockPopulation = 800
+            ),
+            BuildingDefinition(
+                id = "road-flyover",
+                category = BuildingCategory.Infrastructure,
+                title = "Flyover",
+                assetPath = pick("road-bridge", "bridge"),
+                cost = 3200,
+                roadUpgrade = RoadUpgrade.Flyover,
+                width = 2,
+                depth = 1,
+                unlockPopulation = 1200
             ),
             BuildingDefinition(
                 id = "green-central-park",
@@ -167,9 +246,76 @@ object BuildingCatalog {
                 title = "Central Park",
                 assetPath = pick("tree", "park"),
                 cost = 1200,
+                width = 2,
+                depth = 2,
                 happinessImpact = 12,
                 sustainabilityImpact = 15,
-                waterImpact = -5
+                waterImpact = -5,
+                pollutionImpact = -10,
+                serviceCoverage = 5
+            ),
+            BuildingDefinition(
+                id = "riverfront-district",
+                category = BuildingCategory.Riverfront,
+                title = "Riverfront District",
+                assetPath = pick("boat-house", "ramp-wide", "gate"),
+                cost = 8500,
+                width = 3,
+                depth = 2,
+                jobs = 75,
+                happinessImpact = 14,
+                sustainabilityImpact = 8,
+                powerImpact = -20,
+                waterImpact = -12,
+                taxIncome = 1450,
+                unlockPopulation = 600
+            ),
+            BuildingDefinition(
+                id = "transport-bus-terminal",
+                category = BuildingCategory.Transport,
+                title = "Bus Terminal",
+                assetPath = pick("bus", "van", "road-roundabout"),
+                cost = 9000,
+                width = 3,
+                depth = 2,
+                jobs = 60,
+                happinessImpact = 8,
+                powerImpact = -18,
+                pollutionImpact = -8,
+                serviceCoverage = 8,
+                unlockPopulation = 800
+            ),
+            BuildingDefinition(
+                id = "transport-metro",
+                category = BuildingCategory.Transport,
+                title = "Metro Station",
+                assetPath = pick("train-electric-subway", "train-tram-modern", "track"),
+                cost = 22000,
+                width = 3,
+                depth = 3,
+                jobs = 120,
+                happinessImpact = 15,
+                powerImpact = -55,
+                pollutionImpact = -18,
+                serviceCoverage = 10,
+                unlockPopulation = 2000
+            ),
+            BuildingDefinition(
+                id = "smart-capital-command",
+                category = BuildingCategory.Government,
+                title = "Smart Capital Core",
+                assetPath = pick("building-skyscraper-e", "building-skyscraper-d"),
+                cost = 42000,
+                width = 4,
+                depth = 4,
+                jobs = 300,
+                happinessImpact = 20,
+                sustainabilityImpact = 20,
+                powerImpact = -100,
+                waterImpact = -60,
+                taxIncome = 6000,
+                serviceCoverage = 12,
+                unlockPopulation = 4000
             )
         )
     }

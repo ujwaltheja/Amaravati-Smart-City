@@ -133,24 +133,6 @@ private fun screenTapToGrid(offset: Offset, size: IntSize): Position {
     )
 }
 
-private fun placementFootprint(definition: BuildingDefinition): Float {
-    return when (definition.category) {
-        BuildingCategory.Infrastructure -> 1.8f
-        BuildingCategory.GreenSpace -> 3.8f
-        BuildingCategory.Government -> 5.2f
-        BuildingCategory.Industrial -> 4.8f
-        else -> 3.2f
-    }
-}
-
-private fun canPlaceAt(position: Position, definition: BuildingDefinition, items: List<PlacedItem>): Boolean {
-    val minDistance = placementFootprint(definition)
-    return items.none { item ->
-        item.definition.cost > 0 &&
-            kotlin.math.hypot(item.position.x - position.x, item.position.z - position.z) < minDistance
-    }
-}
-
 private fun nearestBuildableItem(position: Position, items: List<PlacedItem>): PlacedItem? {
     return items
         .filter { it.definition.cost > 0 }
@@ -214,9 +196,16 @@ fun AmaravatiGameSurface(
     var isPhotoMode by remember { mutableStateOf(false) }
     var isSnapshotFlashing by remember { mutableStateOf(false) }
     var showHeatmap by remember { mutableStateOf(false) }
+    var heatmapMode by remember { mutableStateOf(HeatmapMode.Traffic) }
     var sceneSize by remember { mutableStateOf(IntSize.Zero) }
     var placementPreview by remember { mutableStateOf<Position?>(null) }
     var placementRotation by remember { mutableStateOf(0f) }
+    var inspectedItem by remember { mutableStateOf<PlacedItem?>(null) }
+    var pendingBulldoze by remember { mutableStateOf<PlacedItem?>(null) }
+    val roadGraph = remember(placedItems) { buildRoadGraph(placedItems) }
+    val placementIsValid = selectedBuilding?.let { selected ->
+        placementPreview?.let { canPlaceOnGrid(selected, it, placedItems) && gameState.money >= selected.cost } ?: true
+    } ?: false
 
     val carAssets = remember(assetPaths) {
         val preferred = listOf("sedan.glb", "suv.glb", "taxi.glb", "hatchback-sports.glb", "delivery.glb", "van.glb", "police.glb", "truck.glb", "race.glb", "ambulance.glb")
@@ -311,34 +300,38 @@ fun AmaravatiGameSurface(
     LaunchedEffect(isNight) { soundManager.updateAmbiance(isNight) }
 
     val placeBuildingAt: (BuildingDefinition, Position) -> Unit = { b, rawPosition ->
-        if (gameState.money >= b.cost && b.assetPath.isNotBlank()) {
+        if (b.assetPath.isNotBlank()) {
             val now = System.currentTimeMillis()
             if (now - lastPlacementTime >= 150) {
                 lastPlacementTime = now
-                soundManager.playBuildSound()
-                val pos = snapPlacement(rawPosition)
-                viewModel.addPlacedItem(PlacedItem(id = now, definition = b, position = pos, rotationY = placementRotation))
-                viewModel.updateMoney(-b.cost)
-                viewModel.updatePopulation(b.populationImpact)
-                viewModel.updateHappiness(b.happinessImpact)
-                if (b.category == BuildingCategory.Infrastructure) {
-                    roadSegments += RoadSegment(id = now, position = Position(pos.x, 0.01f, pos.z), rotationY = placementRotation)
+                if (viewModel.placeBuilding(b, rawPosition, placementRotation)) {
+                    soundManager.playBuildSound()
+                    placementPreview = null
                 }
-                placementPreview = null
             }
         }
     }
 
+    LaunchedEffect(placedItems) {
+        roadSegments.clear()
+        roadSegments.addAll(
+            placedItems.filter { isRoad(it.definition) }
+                .map { RoadSegment(id = it.id, position = it.position, rotationY = it.rotationY) }
+        )
+    }
+
     val demolishItem: (PlacedItem) -> Unit = { removable ->
-            viewModel.removePlacedItem(removable)
-            roadSegments.removeAll { it.id == removable.id }
-            viewModel.updateMoney((removable.definition.cost * 0.5f).toLong())
+        if (removable.definition.cost >= 8000) {
+            pendingBulldoze = removable
+        } else {
+            viewModel.bulldoze(removable)
+        }
     }
 
     val onBuildInView: () -> Unit = {
         selectedBuilding?.let { b ->
             val pos = placementPreview ?: Position(0f, 0.02f, -12f)
-            if (canPlaceAt(pos, b, placedItems)) {
+            if (canPlaceOnGrid(b, pos, placedItems)) {
                 placeBuildingAt(b, pos)
             } else {
                 viewModel.updateNews("Placement blocked. Choose a clear grid tile.")
@@ -363,11 +356,12 @@ fun AmaravatiGameSurface(
                                     ?: viewModel.updateNews("No removable structure at that grid tile.")
                                 return@detectTapGestures
                             }
+                            inspectedItem = nearestBuildableItem(pos, placedItems)
                             val selected = selectedBuilding ?: return@detectTapGestures
                             placementPreview = pos
                             if (gameState.money < selected.cost) {
                                 viewModel.updateNews("Insufficient funds for ${selected.title}.")
-                            } else if (canPlaceAt(pos, selected, placedItems)) {
+                            } else if (canPlaceOnGrid(selected, pos, placedItems)) {
                                 placeBuildingAt(selected, pos)
                             } else {
                                 viewModel.updateNews("Placement blocked. Choose a clear grid tile.")
@@ -395,7 +389,14 @@ fun AmaravatiGameSurface(
                 }
             }
 
+            val renderDistanceSq = when (gameState.graphicsQuality) {
+                0 -> 18f * 18f
+                2 -> 55f * 55f
+                else -> 34f * 34f
+            }
             for (item in placedItems) {
+                val farSq = item.position.x * item.position.x + item.position.z * item.position.z
+                if (item.definition.cost > 0 && farSq > renderDistanceSq) continue
                 key(item.id) {
                     val mi = remember(item.id, item.definition.assetPath) { 
                         try { modelLoader.createModelInstance(item.definition.assetPath) } catch (_: Exception) { null } 
@@ -405,7 +406,8 @@ fun AmaravatiGameSurface(
                     }
                 }
             }
-            for (v in vehicles) {
+            val maxVehicles = when (gameState.graphicsQuality) { 0 -> 4; 2 -> 18; else -> 10 }
+            for (v in vehicles.take(maxVehicles).takeIf { roadSegments.isNotEmpty() }.orEmpty()) {
                 val pos = computeVehiclePosition(v, roadSegments)
                 key(v.id) {
                     val mi = remember(v.id, v.assetPath) { try { modelLoader.createModelInstance(v.assetPath) } catch (_: Exception) { null } }
@@ -428,6 +430,26 @@ fun AmaravatiGameSurface(
                     )
                 }
             }
+        }
+
+        if (showHeatmap) {
+            HeatmapOverlay(
+                modifier = Modifier.fillMaxSize(),
+                items = placedItems,
+                graph = roadGraph,
+                state = gameState,
+                mode = heatmapMode
+            )
+        }
+
+        placementPreview?.let { preview ->
+            PlacementOverlay(
+                modifier = Modifier.fillMaxSize(),
+                preview = preview,
+                sceneSize = sceneSize,
+                isValid = placementIsValid,
+                selected = selectedBuilding
+            )
         }
 
         // --- TOP HUD SECTION ---
@@ -455,6 +477,22 @@ fun AmaravatiGameSurface(
             vehicles = vehicles, 
             center = Position(0f, 0f, 0f)
         )
+
+        SystemPanel(
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 220.dp, end = 16.dp).width(190.dp),
+            state = gameState,
+            graph = roadGraph,
+            heatmapMode = if (showHeatmap) heatmapMode else null
+        )
+
+        inspectedItem?.let { item ->
+            InspectPanel(
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).width(210.dp),
+                item = item,
+                onClose = { inspectedItem = null },
+                onBulldoze = { demolishItem(item) }
+            )
+        }
         
         // --- ACTION BUTTONS ---
         Column(
@@ -464,9 +502,15 @@ fun AmaravatiGameSurface(
             GlassPanel(shape = CircleShape) { IconButton(onClick = onBuildInView, Modifier.size(46.dp)) { Icon(Icons.Default.AddLocation, null, tint = HUDColors.AmaravatiTeal) } }
             GlassPanel(shape = CircleShape) { IconButton(onClick = { isPhotoMode = !isPhotoMode }, Modifier.size(46.dp)) { Icon(if(isPhotoMode) Icons.Default.Close else Icons.Default.CameraAlt, null, tint = if (isPhotoMode) Color.White else HUDColors.AmaravatiTeal) } }
             if (!isPhotoMode) {
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { showHeatmap = !showHeatmap }, Modifier.size(46.dp)) { Icon(Icons.Default.Map, null, tint = if (showHeatmap) HUDColors.AmaravatiTeal else Color.White) } }
+                GlassPanel(shape = CircleShape) { IconButton(onClick = {
+                    showHeatmap = true
+                    heatmapMode = HeatmapMode.entries[(heatmapMode.ordinal + 1) % HeatmapMode.entries.size]
+                }, Modifier.size(46.dp)) { Icon(Icons.Default.Map, null, tint = if (showHeatmap) HUDColors.AmaravatiTeal else Color.White) } }
                 GlassPanel(shape = CircleShape) { IconButton(onClick = { placementRotation = (placementRotation + 90f) % 360f }, Modifier.size(46.dp)) { Icon(Icons.Default.RotateRight, null, tint = Color.White) } }
+                GlassPanel(shape = CircleShape) { IconButton(onClick = { placementPreview = null; showHeatmap = false }, Modifier.size(46.dp)) { Icon(Icons.Default.Cancel, null, tint = Color.White) } }
                 GlassPanel(shape = CircleShape) { IconButton(onClick = { isBulldozeMode = !isBulldozeMode }, Modifier.size(46.dp)) { Icon(Icons.Default.Delete, null, tint = if (isBulldozeMode) Color.Red else Color.White) } }
+                GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.clearEmergency() }, Modifier.size(46.dp)) { Icon(Icons.Default.LocalHospital, null, tint = if (gameState.activeEmergency.isNotBlank()) Color(0xFFFF7043) else Color.White) } }
+                GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.setGraphicsQuality((gameState.graphicsQuality + 1) % 3) }, Modifier.size(46.dp)) { Icon(Icons.Default.Tune, null, tint = Color.White) } }
                 Spacer(Modifier.height(6.dp))
                 GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.saveGame() }, Modifier.size(40.dp)) { Icon(Icons.Default.Save, null, tint = Color.White.copy(0.7f)) } }
                 GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.loadGame() }, Modifier.size(40.dp)) { Icon(Icons.Default.Restore, null, tint = Color.White.copy(0.7f)) } }
@@ -495,7 +539,7 @@ fun AmaravatiGameSurface(
                         building = b,
                         canAfford = gameState.money >= b.cost,
                         previewPosition = placementPreview,
-                        canPlacePreview = placementPreview?.let { canPlaceAt(it, b, placedItems) } ?: true,
+                        canPlacePreview = placementPreview?.let { canPlaceOnGrid(b, it, placedItems) } ?: true,
                         onPreview = { placementPreview = Position(0f, 0.02f, -12f) },
                         onBuildInView = onBuildInView
                     )
@@ -519,10 +563,128 @@ fun AmaravatiGameSurface(
         Box(modifier = Modifier.align(Alignment.TopEnd).padding(top = 74.dp, end = 20.dp)) { 
             TimeOfDayBadge(gameState.dayTime, isNight) 
         }
+
+        pendingBulldoze?.let { item ->
+            AlertDialog(
+                onDismissRequest = { pendingBulldoze = null },
+                title = { Text("Confirm bulldoze") },
+                text = { Text("${item.definition.title} is expensive. Bulldoze for a partial refund?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.bulldoze(item)
+                        pendingBulldoze = null
+                        inspectedItem = null
+                    }) { Text("Bulldoze") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingBulldoze = null }) { Text("Cancel") }
+                }
+            )
+        }
     }
 }
 
 // ==================== HUD COMPONENTS ====================
+
+@Composable
+private fun PlacementOverlay(
+    modifier: Modifier,
+    preview: Position,
+    sceneSize: IntSize,
+    isValid: Boolean,
+    selected: BuildingDefinition?
+) {
+    if (sceneSize.width <= 0 || sceneSize.height <= 0) return
+    val x = ((preview.x / 34f) + 0.5f) * sceneSize.width
+    val y = ((preview.z / 28f) + 0.5f) * sceneSize.height
+    val color = if (isValid) Color(0xFF46E28F) else Color(0xFFFF4F4F)
+    Canvas(modifier) {
+        val radius = ((selected?.width ?: 1).coerceAtLeast(selected?.depth ?: 1) * 22f).coerceIn(20f, 70f)
+        drawCircle(color.copy(alpha = 0.25f), radius, Offset(x, y))
+        drawCircle(color.copy(alpha = 0.95f), radius, Offset(x, y), style = Stroke(4f))
+    }
+}
+
+@Composable
+private fun HeatmapOverlay(
+    modifier: Modifier,
+    items: List<PlacedItem>,
+    graph: RoadGraph,
+    state: GameState,
+    mode: HeatmapMode
+) {
+    Canvas(modifier.background(Color.Black.copy(alpha = 0.12f))) {
+        items.filter { it.definition.cost > 0 }.forEach { item ->
+            val score = heatScore(mode, item, graph, state)
+            val x = ((item.position.x / 34f) + 0.5f) * size.width
+            val y = ((item.position.z / 28f) + 0.5f) * size.height
+            val color = when (mode) {
+                HeatmapMode.Happiness -> Color(0xFF56E39F)
+                HeatmapMode.Power -> Color(0xFFFFD54F)
+                HeatmapMode.Water -> Color(0xFF4FC3F7)
+                HeatmapMode.Emergency -> Color(0xFFFF7043)
+                HeatmapMode.Pollution -> Color(0xFFDCE775)
+                HeatmapMode.Traffic -> Color(0xFFFF5252)
+            }
+            drawCircle(color.copy(alpha = 0.12f + score * 0.5f), 28f + score * 38f, Offset(x, y))
+        }
+    }
+}
+
+@Composable
+private fun SystemPanel(modifier: Modifier, state: GameState, graph: RoadGraph, heatmapMode: HeatmapMode?) {
+    GlassPanel(modifier = modifier, shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("CITY SYSTEMS", color = HUDColors.AmaravatiTeal, fontSize = 10.sp, fontWeight = FontWeight.Black)
+            MiniMetric("Power", state.powerBalance)
+            MiniMetric("Water", state.waterBalance)
+            MiniMetric("Waste", -state.wasteBalance)
+            MiniMetric("Jobs", state.jobs - state.population / 3)
+            MiniMetric("Housing", state.housingCapacity - state.population)
+            Text("Traffic ${graph.averageCongestion}% · Routes ${graph.routeCount}", color = Color.White.copy(0.82f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("Emergency delay ${graph.emergencyDelay}%", color = if (graph.emergencyDelay > 65) HUDColors.ResourceCritical else Color.White.copy(0.82f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            if (state.activeEmergency.isNotBlank()) {
+                Text(state.activeEmergency.uppercase(), color = HUDColors.ResourceCritical, fontSize = 10.sp, fontWeight = FontWeight.Black)
+            }
+            heatmapMode?.let {
+                Text("HEATMAP: ${it.displayName.uppercase()}", color = HUDColors.AmaravatiTeal, fontSize = 10.sp, fontWeight = FontWeight.Black)
+            }
+            Text("Quality ${listOf("Saver", "Balanced", "High")[state.graphicsQuality]}", color = Color.White.copy(0.72f), fontSize = 10.sp)
+        }
+    }
+}
+
+@Composable
+private fun MiniMetric(label: String, value: Int) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.White.copy(0.7f), fontSize = 10.sp)
+        Text(if (value >= 0) "+$value" else "$value", color = if (value >= 0) HUDColors.AmaravatiTeal else HUDColors.ResourceCritical, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun InspectPanel(modifier: Modifier, item: PlacedItem, onClose: () -> Unit, onBulldoze: () -> Unit) {
+    GlassPanel(modifier = modifier, shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(item.definition.title.uppercase(), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+                IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(16.dp)) }
+            }
+            Text(item.definition.category.displayName, color = HUDColors.AmaravatiTeal, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("Footprint ${item.definition.width}x${item.definition.depth}", color = Color.White.copy(0.74f), fontSize = 10.sp)
+            Text("Jobs ${item.definition.jobs} · Housing ${item.definition.housingCapacity}", color = Color.White.copy(0.74f), fontSize = 10.sp)
+            Text("Tax ₹${formatMoney(item.definition.taxIncome)}", color = Color.White.copy(0.74f), fontSize = 10.sp)
+            if (item.definition.roadUpgrade != RoadUpgrade.None) {
+                Text("${item.definition.roadUpgrade.displayName} capacity ${item.definition.roadUpgrade.capacity}", color = Color.White.copy(0.74f), fontSize = 10.sp)
+            }
+            OutlinedButton(onClick = onBulldoze, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, HUDColors.ResourceCritical.copy(0.8f))) {
+                Icon(Icons.Default.Delete, null, modifier = Modifier.size(14.dp), tint = HUDColors.ResourceCritical)
+                Spacer(Modifier.width(6.dp))
+                Text("BULLDOZE", color = HUDColors.ResourceCritical, fontSize = 11.sp, fontWeight = FontWeight.Black)
+            }
+        }
+    }
+}
 
 @Composable
 private fun GlassTopBar(gameState: GameState, isNight: Boolean, isPaused: Boolean, simSpeed: Float, onBack: () -> Unit, onTogglePause: () -> Unit, onSpeedChange: (Float) -> Unit) {
