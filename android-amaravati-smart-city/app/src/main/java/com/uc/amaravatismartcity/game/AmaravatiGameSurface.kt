@@ -37,7 +37,10 @@ import com.uc.amaravatismartcity.models.GlbAssetIndex
 import com.uc.amaravatismartcity.models.PlacedItem
 import io.github.sceneview.SceneView
 import io.github.sceneview.math.Position
-import io.github.sceneview.node.ModelNode
+import io.github.sceneview.node.LightNode
+import com.google.android.filament.LightManager
+import io.github.sceneview.math.Float3
+import io.github.sceneview.math.Float4
 import io.github.sceneview.rememberCameraManipulator
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelLoader
@@ -209,9 +212,21 @@ fun AmaravatiGameSurface(
         assetPaths.filter { it.contains("Mini Characters/character-", true) }.take(5)
     }
 
-    // Initialize rich realistic city base + roads + traffic
+    // Handle initial load from Database once Catalog is ready
+    val savedItems by viewModel.getSavedItemsFlow().collectAsStateWithLifecycle(initialValue = emptyList())
+    var hasSyncLoaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(buildingCatalog, savedItems) {
+        if (!hasSyncLoaded && buildingCatalog.isNotEmpty() && savedItems.isNotEmpty()) {
+            viewModel.syncLoadedItems(savedItems, buildingCatalog)
+            hasSyncLoaded = true
+            viewModel.updateNews("City layout restored from secure database.")
+        }
+    }
+
+    // Initialize rich realistic city base ONLY IF database is empty
     LaunchedEffect(assetPaths, buildingCatalog) {
-        if (placedItems.isEmpty() && assetPaths.isNotEmpty() && buildingCatalog.isNotEmpty()) {
+        if (placedItems.isEmpty() && assetPaths.isNotEmpty() && buildingCatalog.isNotEmpty() && savedItems.isEmpty()) {
             // === REALISTIC CITY FOUNDATION: Krishna riverfront style grid ===
             val tLow = tileAssets.firstOrNull { it.contains("tile-low") } ?: tileAssets.firstOrNull() ?: ""
             val tHigh = tileAssets.firstOrNull { it.contains("tile-high") } ?: tLow
@@ -500,9 +515,32 @@ fun AmaravatiGameSurface(
             cameraManipulator = cameraManipulator
         ) {
             // === DYNAMIC 3D LIGHTING (B) - Filament only where it truly wins ===
-            // For the rich PBR GLB assets + shadows/lighting on complex models, SceneView/Filament is the production winner.
-            // All logic (dayTime, light placement, intensity) remains 100% pure native Kotlin in the simulation.
-            // (Full working lights code is provided in comments at the bottom of this file for easy integration.)
+            // Sun/Moon directional light - rotates based on game time
+            val sunAngle = (day - 6f) * 15f
+            val dx = sin(Math.toRadians(sunAngle.toDouble())).toFloat() * 0.4f
+            val dz = cos(Math.toRadians(sunAngle.toDouble())).toFloat() * 0.3f
+            
+            LightNode(
+                engine = engine,
+                type = LightManager.Type.DIRECTIONAL,
+                intensity = if (isNight) 2800f else 42000f,
+                color = if (isNight) Float4(0.6f, 0.7f, 1f, 1f) else Float4(1f, 0.95f, 0.85f, 1f),
+                direction = Float3(dx, -0.9f, dz)
+            )
+
+            // Night street lights positioned from our pure native road data
+            if (isNight) {
+                roadSegments.take(8).forEach { seg ->
+                    LightNode(
+                        engine = engine,
+                        type = LightManager.Type.POINT,
+                        intensity = 18000f,
+                        color = Float4(1f, 0.92f, 0.75f, 1f),
+                        position = Position(seg.position.x, 3.5f, seg.position.z)
+                    )
+                }
+            }
+
             // Ground / city base tiles + placed buildings / props
             // Pure native culling first (distance + rough view) — critical for performance on mobile as world grows.
             placedItems.forEach { item ->
@@ -655,18 +693,9 @@ fun AmaravatiGameSurface(
                 }
             }
 
-            // Pure native persistence buttons (using SharedPreferences + JSON for simplicity; full DataStore in helpers)
+            // Pure native persistence buttons (using Room database)
             Surface(
-                onClick = {
-                    // Simple save of key state (production: use DataStore with full placed/roads serialization)
-                    val prefs = context.getSharedPreferences("amaravati_save", Context.MODE_PRIVATE)
-                    prefs.edit()
-                        .putLong("money", gameState.money)
-                        .putInt("population", gameState.population)
-                        .putInt("placed", placedItems.size)
-                        .apply()
-                    viewModel.updateNews("Game saved (native prefs)")
-                },
+                onClick = { viewModel.saveGame() },
                 shape = RoundedCornerShape(10.dp),
                 color = Color(0xFF4CAF50).copy(alpha = 0.7f),
                 modifier = Modifier.size(42.dp)
@@ -676,14 +705,7 @@ fun AmaravatiGameSurface(
                 }
             }
             Surface(
-                onClick = {
-                    val prefs = context.getSharedPreferences("amaravati_save", Context.MODE_PRIVATE)
-                    val savedMoney = prefs.getLong("money", gameState.money)
-                    val savedPop = prefs.getInt("population", gameState.population)
-                    viewModel.updateMoney(savedMoney - gameState.money) // delta
-                    // Note: for full restore of placed, would need serialization of items
-                    viewModel.updateNews("Game loaded (money/pop restored)")
-                },
+                onClick = { viewModel.loadGame() },
                 shape = RoundedCornerShape(10.dp),
                 color = Color(0xFF2196F3).copy(alpha = 0.7f),
                 modifier = Modifier.size(42.dp)

@@ -1,13 +1,23 @@
 package com.uc.amaravatismartcity.game
 
-import androidx.lifecycle.ViewModel
-import com.uc.amaravatismartcity.models.PlacedItem
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.uc.amaravatismartcity.db.GameDatabase
+import com.uc.amaravatismartcity.db.entities.GameStateEntity
+import com.uc.amaravatismartcity.db.entities.PlacedItemEntity
+import com.uc.amaravatismartcity.models.*
+import io.github.sceneview.math.Position
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
-class GameViewModel : ViewModel() {
+class GameViewModel(application: Application) : AndroidViewModel(application) {
+    private val db = GameDatabase.getDatabase(application)
+    private val dao = db.gameDao()
+
     private val _gameState = MutableStateFlow(GameState())
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
 
@@ -20,14 +30,14 @@ class GameViewModel : ViewModel() {
     private val _activeGoal = MutableStateFlow("Establish core infrastructure: Place 2 roads and a residential block.")
     val activeGoal: StateFlow<String> = _activeGoal.asStateFlow()
 
-    private val _events = MutableStateFlow<List<String>>(emptyList())
-    val events: StateFlow<List<String>> = _events.asStateFlow()
-
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
     private val _simSpeed = MutableStateFlow(1f)
     val simSpeed: StateFlow<Float> = _simSpeed.asStateFlow()
+
+    private val _events = MutableStateFlow<List<String>>(emptyList())
+    val events: StateFlow<List<String>> = _events.asStateFlow()
 
     private val eventPool = listOf(
         "Heavy monsoon rain: Traffic slowed, happiness -4.",
@@ -39,6 +49,91 @@ class GameViewModel : ViewModel() {
         "Citizens praise new green corridor.",
         "School exam results high — education impact +3."
     )
+
+    init {
+        // Automatically attempt to load saved game on init
+        loadGame()
+    }
+
+    fun saveGame() {
+        viewModelScope.launch {
+            val current = _gameState.value
+            val items = _placedItems.value
+
+            // Save state
+            dao.saveGameState(GameStateEntity(
+                money = current.money,
+                population = current.population,
+                happiness = current.happiness,
+                water = current.water,
+                power = current.power,
+                waste = current.waste,
+                pollution = current.pollution,
+                sustainabilityScore = current.sustainabilityScore,
+                cityName = current.cityName,
+                rank = current.rank,
+                dayTime = current.dayTime
+            ))
+
+            // Save items
+            dao.clearPlacedItems()
+            dao.insertPlacedItems(items.map {
+                PlacedItemEntity(
+                    id = it.id,
+                    buildingId = it.definition.id,
+                    posX = it.position.x,
+                    posY = it.position.y,
+                    posZ = it.position.z,
+                    rotationY = it.rotationY,
+                    scale = it.scale
+                )
+            })
+            _currentNews.value = "City data synchronized with secure archives."
+        }
+    }
+
+    fun loadGame() {
+        viewModelScope.launch {
+            val savedState = dao.getGameState()
+            if (savedState != null) {
+                _gameState.update {
+                    it.copy(
+                        money = savedState.money,
+                        population = savedState.population,
+                        happiness = savedState.happiness,
+                        water = savedState.water,
+                        power = savedState.power,
+                        waste = savedState.waste,
+                        pollution = savedState.pollution,
+                        sustainabilityScore = savedState.sustainabilityScore,
+                        cityName = savedState.cityName,
+                        rank = savedState.rank,
+                        dayTime = savedState.dayTime
+                    )
+                }
+            }
+        }
+    }
+
+    /** Reconstructs PlacedItems from entities once the building catalog is available. */
+    fun syncLoadedItems(entities: List<PlacedItemEntity>, catalog: List<BuildingDefinition>) {
+        val reconstructed = entities.mapNotNull { entity ->
+            val def = catalog.firstOrNull { it.id == entity.buildingId }
+            if (def != null) {
+                PlacedItem(
+                    id = entity.id,
+                    definition = def,
+                    position = Position(entity.posX, entity.posY, entity.posZ),
+                    rotationY = entity.rotationY,
+                    scale = entity.scale
+                )
+            } else null
+        }
+        _placedItems.value = reconstructed
+        updateTotalBuildings(reconstructed.size)
+    }
+
+    fun getSavedItemsFlow(): Flow<List<PlacedItemEntity>> = dao.getAllPlacedItems()
 
     fun updateNews(news: String) {
         _currentNews.value = news
