@@ -501,7 +501,15 @@ fun AmaravatiGameSurface(
 // ==================== HUD COMPONENTS ====================
 
 @Composable
-private fun GlassTopBar(gameState: GameState, isNight: Boolean, isPaused: Boolean, simSpeed: Float, onBack: () -> Unit, onTogglePause: () -> Unit, onSpeedChange: (Float) -> Unit) {
+private fun GlassTopBar(
+    gameState: GameState, 
+    isNight: Boolean, 
+    isPaused: Boolean, 
+    simSpeed: Float, 
+    onBack: () -> Unit, 
+    onTogglePause: () -> Unit, 
+    onSpeedChange: (Float) -> Unit
+) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         GlassPanel(shape = RoundedCornerShape(14.dp)) {
             Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
