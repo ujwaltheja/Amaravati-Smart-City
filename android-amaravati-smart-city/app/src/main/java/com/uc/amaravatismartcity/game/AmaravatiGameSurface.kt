@@ -164,6 +164,11 @@ fun AmaravatiGameSurface(
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    // Sound Manager (Option 2)
+    val soundManager = remember { SoundManager(context) }
+    DisposableEffect(Unit) {
+        onDispose { soundManager.release() }
+    }
     val assetPaths by produceState(initialValue = emptyList<String>(), context) {
         value = GlbAssetIndex.scan(context.assets)
     }
@@ -501,17 +506,11 @@ fun AmaravatiGameSurface(
         }
     }
 
-    // Sound Manager (Option 2)
-    val soundManager = remember { SoundManager(context) }
-    DisposableEffect(Unit) {
-        onDispose { soundManager.release() }
-    }
-
     var isPhotoMode by remember { mutableStateOf(false) }
     var isSnapshotFlashing by remember { mutableStateOf(false) }
     var showHeatmap by remember { mutableStateOf(false) } // Option 1: Data Viz
 
-    // ... existing background color logic ...
+    // Background gradient reacts to day/night
     val bgTop = when {
         isNight -> Color(0xFF01060F)
         dawnDusk -> Color(0xFF1F2A3D)
@@ -550,8 +549,7 @@ fun AmaravatiGameSurface(
             modelLoader = modelLoader,
             cameraManipulator = cameraManipulator
         ) {
-            // === DYNAMIC 3D LIGHTING (B) - Filament only where it truly wins ===
-            // Sun/Moon directional light - rotates based on game time
+            // === DYNAMIC 3D LIGHTING (B) ===
             val sunAngle = (day - 6f) * 15f
             val dx = sin(Math.toRadians(sunAngle.toDouble())).toFloat() * 0.4f
             val dz = cos(Math.toRadians(sunAngle.toDouble())).toFloat() * 0.3f
@@ -563,7 +561,6 @@ fun AmaravatiGameSurface(
                 direction = Float3(dx, -0.9f, dz)
             )
 
-            // Night street lights positioned from our pure native road data
             if (isNight) {
                 roadSegments.take(8).forEach { seg ->
                     LightNode(
@@ -579,10 +576,7 @@ fun AmaravatiGameSurface(
             if (showHeatmap) {
                 placedItems.filter { it.definition.powerImpact != 0 || it.definition.pollutionImpact != 0 }.forEach { item ->
                     key("heatmap-${item.id}") {
-                        // We would use an unlit semi-transparent plane or box here.
-                        // Since we rely on standard glTF, we fallback to drawing an overlay or using pure native canvas in UI.
-                        // Here we simulate it by placing a colored native node if we had a primitive generator.
-                        // For pure Compose, the Minimap handles data viz.
+                        // Hook for data visualization overlays
                     }
                 }
             }

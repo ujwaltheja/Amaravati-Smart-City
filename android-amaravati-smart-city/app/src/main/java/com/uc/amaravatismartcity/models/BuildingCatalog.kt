@@ -120,6 +120,7 @@ object BuildingCatalog {
                 powerImpact = -80,
                 waterImpact = -60,
                 wasteImpact = 40,
+                pollutionImpact = 35,
                 unlockPopulation = 400
             ),
             BuildingDefinition(

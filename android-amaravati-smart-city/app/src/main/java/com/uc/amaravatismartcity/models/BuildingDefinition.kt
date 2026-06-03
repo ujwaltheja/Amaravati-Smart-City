@@ -11,6 +11,7 @@ data class BuildingDefinition(
     val sustainabilityImpact: Int = 0,
     val powerImpact: Int = 0,      // + production, - consumption
     val waterImpact: Int = 0,      // + production, - consumption
-    val wasteImpact: Int = 0,      // + generation, - collection/management
+    val wasteImpact: Int = 0,       // + generation, - collection/management
+    val pollutionImpact: Int = 0,   // + generation, - cleaning
     val unlockPopulation: Int = 0  // 0 means unlocked by default
-)
+    )
