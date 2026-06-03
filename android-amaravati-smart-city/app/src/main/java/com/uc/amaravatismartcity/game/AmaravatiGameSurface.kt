@@ -513,7 +513,9 @@ private fun GlassTopBar(
     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         GlassPanel(shape = RoundedCornerShape(14.dp)) {
             Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.ArrowBack, null, tint = Color.White, Modifier.size(16.dp)) }
+                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.ArrowBack, null, modifier = Modifier.size(16.dp), tint = Color.White)
+                }
                 Column { 
                     Text(gameState.cityName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
                     Text(gameState.rank.uppercase(), color = HUDColors.AmaravatiTeal, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold) 
@@ -532,7 +534,9 @@ private fun GlassTopBar(
                     ResourceIcon(Icons.Default.FlashOn, gameState.power, Color(0xFFFFD54F))
                     ResourceIcon(Icons.Default.WaterDrop, gameState.water, Color(0xFF4FC3F7))
                 }
-                IconButton(onClick = onTogglePause, modifier = Modifier.size(24.dp)) { Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, null, tint = Color.White, Modifier.size(16.dp)) }
+                IconButton(onClick = onTogglePause, modifier = Modifier.size(24.dp)) {
+                    Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, null, modifier = Modifier.size(16.dp), tint = Color.White)
+                }
             }
         }
     }
@@ -541,7 +545,7 @@ private fun GlassTopBar(
 @Composable
 private fun GlassStatPill(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) { 
-        Icon(icon, null, tint = color, Modifier.size(14.dp))
+        Icon(icon, null, modifier = Modifier.size(14.dp), tint = color)
         Spacer(Modifier.width(4.dp))
         Text(value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) 
     }
@@ -549,7 +553,7 @@ private fun GlassStatPill(icon: androidx.compose.ui.graphics.vector.ImageVector,
 
 @Composable
 private fun ResourceIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, level: Int, color: Color) {
-    Icon(icon, null, tint = if (level < 30) HUDColors.ResourceCritical else color.copy(alpha = 0.9f), Modifier.size(15.dp))
+    Icon(icon, null, modifier = Modifier.size(15.dp), tint = if (level < 30) HUDColors.ResourceCritical else color.copy(alpha = 0.9f))
 }
 
 @Composable
@@ -568,7 +572,7 @@ private fun GlassGoalTracker(modifier: Modifier, activeGoal: String, population:
     GlassPanel(modifier, RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { 
-                Icon(Icons.Default.EmojiEvents, null, tint = HUDColors.AmaravatiTeal, Modifier.size(16.dp))
+                Icon(Icons.Default.EmojiEvents, null, modifier = Modifier.size(16.dp), tint = HUDColors.AmaravatiTeal)
                 Spacer(Modifier.width(8.dp))
                 Text("OBJECTIVE", color = HUDColors.AmaravatiTeal, fontSize = 9.sp, fontWeight = FontWeight.Black) 
             }
@@ -640,7 +644,7 @@ private fun GlassBuildDock(catalog: List<BuildingDefinition>, selected: Building
                     } 
                 }
                 Box(Modifier.size(30.dp).clip(CircleShape).background(HUDColors.AmaravatiGlow).clickable { onQuickRoad() }, contentAlignment = Alignment.Center) { 
-                    Icon(Icons.Default.AddRoad, null, tint = HUDColors.AmaravatiTeal, Modifier.size(16.dp)) 
+                    Icon(Icons.Default.AddRoad, null, modifier = Modifier.size(16.dp), tint = HUDColors.AmaravatiTeal)
                 }
             }
         }
