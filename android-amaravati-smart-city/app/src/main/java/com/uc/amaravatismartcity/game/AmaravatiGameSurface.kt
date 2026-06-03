@@ -1,8 +1,11 @@
 package com.uc.amaravatismartcity.game
 
+import android.content.Context
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -30,19 +33,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import android.content.Context
-import com.uc.amaravatismartcity.models.BuildingCatalog
-import com.uc.amaravatismartcity.models.BuildingCategory
-import com.uc.amaravatismartcity.models.BuildingDefinition
-import com.uc.amaravatismartcity.models.GlbAssetIndex
-import com.uc.amaravatismartcity.models.PlacedItem
+import com.google.android.filament.LightManager
+import com.uc.amaravatismartcity.models.*
+import dev.romainguy.kotlin.math.Float3
+import dev.romainguy.kotlin.math.Float4
 import io.github.sceneview.SceneView
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.LightNode
 import io.github.sceneview.node.ModelNode
-import com.google.android.filament.LightManager
-import dev.romainguy.kotlin.math.Float3
-import dev.romainguy.kotlin.math.Float4
 import io.github.sceneview.rememberCameraManipulator
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelLoader
@@ -50,9 +48,7 @@ import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
 
-// BorderStroke is in foundation
-import androidx.compose.foundation.BorderStroke
-
+/** Data classes for simulation logic */
 private data class AnimatedVehicle(
     val id: Long,
     val assetPath: String,
@@ -79,6 +75,16 @@ private data class RoadSegment(
     val rotationY: Float = 0f
 )
 
+/** Advanced Gaming HUD Constants */
+private object HUDColors {
+    val GlassBackground = Color(0xFF0A1525).copy(alpha = 0.72f)
+    val GlassBorder = Color.White.copy(alpha = 0.18f)
+    val AmaravatiTeal = Color(0xFF58DBB8)
+    val AmaravatiGlow = Color(0xFF58DBB8).copy(alpha = 0.25f)
+    val ResourceCritical = Color(0xFFFF7043)
+}
+
+/** Simulation Helpers */
 private fun lerp(a: Float, b: Float, t: Float): Float = a + t * (b - a)
 
 private fun computeVehiclePosition(v: AnimatedVehicle, roadSegments: List<RoadSegment>): Position {
@@ -86,7 +92,7 @@ private fun computeVehiclePosition(v: AnimatedVehicle, roadSegments: List<RoadSe
     val progress = v.phase
     val baseZ = -11f + progress * 27f
     val sway = sin(progress * 6.28f * 1.6) * 0.4f
-    var x = laneX + sway.toFloat() * (if (v.lane == 1) 0.6f else 1f)
+    var x = laneX + (sway.toFloat() * (if (v.lane == 1) 0.6f else 1f))
     var z = baseZ + (if (v.lane == 2) (sin(progress * 3.4) * 1.8f).toFloat() else 0f)
 
     if (roadSegments.isNotEmpty()) {
@@ -118,6 +124,28 @@ private fun snapPlacement(pos: Position, gridSize: Float = 2.0f): Position {
         (kotlin.math.round(pos.x / gridSize) * gridSize),
         pos.y,
         (kotlin.math.round(pos.z / gridSize) * gridSize)
+    )
+}
+
+private fun formatMoney(m: Long): String = when {
+    m >= 1_000_000 -> "${(m / 100000) / 10.0}M"
+    m >= 10_000 -> "${m / 1000}k"
+    else -> m.toString()
+}
+
+@Composable
+private fun GlassPanel(
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(18.dp),
+    border: BorderStroke? = BorderStroke(0.6.dp, HUDColors.GlassBorder),
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = modifier,
+        color = HUDColors.GlassBackground,
+        shape = shape,
+        border = border,
+        content = content
     )
 }
 
@@ -237,13 +265,15 @@ fun AmaravatiGameSurface(
                     if (roads.isNotEmpty() && (roadId == null || sin(now.toDouble()).toFloat() > 0.98f)) roadId = roads.random().id
                     v.copy(phase = nextPhase, currentRoadId = roadId)
                 }
-                vehicles.clear(); vehicles.addAll(newVehicles)
+                vehicles.clear()
+                vehicles.addAll(newVehicles)
                 val newPeds = pedestrians.map { p ->
                     var nextPhase = p.phase + (p.speed * 0.008f * dt * speedMul)
                     if (nextPhase > 1.05f) nextPhase = -0.08f
                     p.copy(phase = nextPhase)
                 }
-                pedestrians.clear(); pedestrians.addAll(newPeds)
+                pedestrians.clear()
+                pedestrians.addAll(newPeds)
             }
         }
     }
@@ -273,7 +303,10 @@ fun AmaravatiGameSurface(
                 val pz = (cos(count * 0.6) * (8f + count * 0.2f)).toFloat()
                 val pos = snapPlacement(Position(px, 0f, pz))
                 viewModel.addPlacedItem(PlacedItem(id = now, definition = b, position = pos, rotationY = (count * 20f) % 360f))
-                viewModel.updateMoney(-b.cost); viewModel.updatePopulation(b.populationImpact); viewModel.updateHappiness(b.happinessImpact); viewModel.updateSustainability(b.sustainabilityImpact)
+                viewModel.updateMoney(-b.cost)
+                viewModel.updatePopulation(b.populationImpact)
+                viewModel.updateHappiness(b.happinessImpact)
+                viewModel.updateSustainability(b.sustainabilityImpact)
                 if (b.category == BuildingCategory.Infrastructure) {
                     viewModel.updateTraffic(-11)
                     roadSegments += RoadSegment(id = now, position = Position(pos.x, 0.01f, pos.z), rotationY = (count * 20f) % 360f)
@@ -296,7 +329,9 @@ fun AmaravatiGameSurface(
                 val now = System.currentTimeMillis()
                 val pos = snapPlacement(Position(0f, 0.02f, -10f))
                 viewModel.addPlacedItem(PlacedItem(id = now, definition = b, position = pos))
-                viewModel.updateMoney(-b.cost); viewModel.updatePopulation(b.populationImpact); viewModel.updateHappiness(b.happinessImpact)
+                viewModel.updateMoney(-b.cost)
+                viewModel.updatePopulation(b.populationImpact)
+                viewModel.updateHappiness(b.happinessImpact)
                 if (b.category == BuildingCategory.Infrastructure) roadSegments += RoadSegment(id = now, position = Position(pos.x, 0.01f, pos.z))
             }
         }
@@ -307,67 +342,159 @@ fun AmaravatiGameSurface(
 
     Box(modifier = modifier.fillMaxSize().background(Brush.verticalGradient(listOf(bgTop, bgBot)))) {
         SceneView(
-            modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onLongPress = { if (placedItems.isNotEmpty()) onDemolishLast() }) },
+            modifier = Modifier.fillMaxSize().pointerInput(Unit) { 
+                detectTapGestures(onLongPress = { if (placedItems.isNotEmpty()) onDemolishLast() }) 
+            },
             engine = engine, modelLoader = modelLoader, cameraManipulator = cameraManipulator
         ) {
             val sunAngle = (day - 6f) * 15f
-            LightNode(type = LightManager.Type.DIRECTIONAL, intensity = if (isNight) 2500f else 40000f, color = if (isNight) Float4(0.6f, 0.7f, 1f, 1f) else Float4(1f, 0.95f, 0.85f, 1f), direction = Float3(sin(Math.toRadians(sunAngle.toDouble())).toFloat() * 0.4f, -0.9f, cos(Math.toRadians(sunAngle.toDouble())).toFloat() * 0.3f))
-            if (isNight) roadSegments.take(8).forEach { seg -> LightNode(type = LightManager.Type.POINT, intensity = 15000f, color = Float4(1f, 0.9f, 0.7f, 1f), position = Position(seg.position.x, 3.5f, seg.position.z)) }
+            LightNode(
+                type = LightManager.Type.DIRECTIONAL, 
+                intensity = if (isNight) 2500f else 40000f, 
+                color = if (isNight) Float4(0.6f, 0.7f, 1f, 1f) else Float4(1f, 0.95f, 0.85f, 1f), 
+                direction = Float3(sin(Math.toRadians(sunAngle.toDouble())).toFloat() * 0.4f, -0.9f, cos(Math.toRadians(sunAngle.toDouble())).toFloat() * 0.3f)
+            )
+            if (isNight) {
+                roadSegments.take(8).forEach { seg -> 
+                    LightNode(type = LightManager.Type.POINT, intensity = 15000f, color = Float4(1f, 0.9f, 0.7f, 1f), position = Position(seg.position.x, 3.5f, seg.position.z)) 
+                }
+            }
 
             placedItems.forEach { item ->
                 if (!shouldRenderItem(item.position)) return@forEach
                 key(item.id) {
-                    val mi = remember(item.id, item.definition.assetPath) { try { modelLoader.createModelInstance(item.definition.assetPath) } catch (_: Exception) { null } }
-                    if (mi != null) ModelNode(modelInstance = mi, scaleToUnits = item.scale, centerOrigin = Position(0f, 0f, 0f), position = item.position)
+                    val mi = remember(item.id, item.definition.assetPath) { 
+                        try { modelLoader.createModelInstance(item.definition.assetPath) } catch (_: Exception) { null } 
+                    }
+                    if (mi != null) {
+                        ModelNode(modelInstance = mi, scaleToUnits = item.scale, centerOrigin = Position(0f, 0f, 0f), position = item.position)
+                    }
                 }
             }
             vehicles.forEach { v ->
                 val pos = computeVehiclePosition(v, roadSegments)
                 if (!shouldRenderItem(pos, 55f)) return@forEach
                 key(v.id) {
-                    val mi = remember(v.id, v.assetPath) { try { modelLoader.createModelInstance(v.assetPath) } catch (_: Exception) { null } }
-                    if (mi != null) ModelNode(modelInstance = mi, scaleToUnits = v.scale, centerOrigin = Position(0f, 0f, 0f), position = pos)
+                    val mi = remember(v.id, v.assetPath) { 
+                        try { modelLoader.createModelInstance(v.assetPath) } catch (_: Exception) { null } 
+                    }
+                    if (mi != null) {
+                        ModelNode(modelInstance = mi, scaleToUnits = v.scale, centerOrigin = Position(0f, 0f, 0f), position = pos)
+                    }
                 }
             }
         }
 
-        // --- GLASS HUD ---
-        Column(Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) {
-            GlassTopBar(gameState, isNight, isPaused, simSpeed, onBack, { viewModel.setPaused(!isPaused) }, { viewModel.setSimSpeed(it) })
+        // --- GLASS HUD LAYOUT ---
+        Column(
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            GlassTopBar(
+                gameState = gameState, 
+                isNight = isNight, 
+                isPaused = isPaused, 
+                simSpeed = simSpeed, 
+                onBack = onBack, 
+                onTogglePause = { viewModel.setPaused(!isPaused) }, 
+                onSpeedChange = { viewModel.setSimSpeed(it) }
+            )
             Spacer(Modifier.height(6.dp))
-            GlassNewsTicker(currentNews, isNight)
+            GlassNewsTicker(news = currentNews, isNight = isNight)
         }
-        GlassGoalTracker(Modifier.align(Alignment.CenterStart).padding(top = 100.dp), activeGoal, gameState.population)
         
-        Column(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp, top = 140.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            GlassPanel(shape = CircleShape) { IconButton(onClick = onBuildInView, Modifier.size(44.dp)) { Icon(Icons.Default.AddLocation, null, tint = HUDColors.AmaravatiTeal) } }
-            GlassPanel(shape = CircleShape) { IconButton(onClick = { isPhotoMode = !isPhotoMode }, Modifier.size(44.dp)) { Icon(Icons.Default.CameraAlt, null, tint = if (isPhotoMode) HUDColors.AmaravatiTeal else Color.White) } }
+        GlassGoalTracker(
+            modifier = Modifier.align(Alignment.CenterStart).padding(top = 100.dp), 
+            activeGoal = activeGoal, 
+            population = gameState.population
+        )
+        
+        Column(
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp, top = 140.dp), 
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            GlassPanel(shape = CircleShape) { 
+                IconButton(onClick = onBuildInView, modifier = Modifier.size(44.dp)) { 
+                    Icon(Icons.Default.AddLocation, null, tint = HUDColors.AmaravatiTeal) 
+                } 
+            }
+            GlassPanel(shape = CircleShape) { 
+                IconButton(onClick = { isPhotoMode = !isPhotoMode }, modifier = Modifier.size(44.dp)) { 
+                    Icon(Icons.Default.CameraAlt, null, tint = if (isPhotoMode) HUDColors.AmaravatiTeal else Color.White) 
+                } 
+            }
             if (!isPhotoMode) {
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { showHeatmap = !showHeatmap }, Modifier.size(44.dp)) { Icon(Icons.Default.Map, null, tint = if (showHeatmap) HUDColors.AmaravatiTeal else Color.White) } }
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { isBulldozeMode = !isBulldozeMode; onDemolishLast() }, Modifier.size(44.dp)) { Icon(Icons.Default.Delete, null, tint = if (isBulldozeMode) Color.Red else Color.White) } }
+                GlassPanel(shape = CircleShape) { 
+                    IconButton(onClick = { showHeatmap = !showHeatmap }, modifier = Modifier.size(44.dp)) { 
+                        Icon(Icons.Default.Map, null, tint = if (showHeatmap) HUDColors.AmaravatiTeal else Color.White) 
+                    } 
+                }
+                GlassPanel(shape = CircleShape) { 
+                    IconButton(onClick = { isBulldozeMode = !isBulldozeMode; onDemolishLast() }, modifier = Modifier.size(44.dp)) { 
+                        Icon(Icons.Default.Delete, null, tint = if (isBulldozeMode) Color.Red else Color.White) 
+                    } 
+                }
                 Spacer(Modifier.height(8.dp))
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.saveGame() }, Modifier.size(38.dp)) { Icon(Icons.Default.Save, null, tint = Color.White.copy(0.6f)) } }
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.loadGame() }, Modifier.size(38.dp)) { Icon(Icons.Default.Restore, null, tint = Color.White.copy(0.6f)) } }
+                GlassPanel(shape = CircleShape) { 
+                    IconButton(onClick = { viewModel.saveGame() }, modifier = Modifier.size(38.dp)) { 
+                        Icon(Icons.Default.Save, null, tint = Color.White.copy(0.6f)) 
+                    } 
+                }
+                GlassPanel(shape = CircleShape) { 
+                    IconButton(onClick = { viewModel.loadGame() }, modifier = Modifier.size(38.dp)) { 
+                        Icon(Icons.Default.Restore, null, tint = Color.White.copy(0.6f)) 
+                    } 
+                }
             }
         }
 
         if (isPhotoMode) {
             Box(Modifier.fillMaxSize()) {
-                IconButton(onClick = { isSnapshotFlashing = true; viewModel.updateNews("Snapshot saved.") }, Modifier.align(Alignment.BottomCenter).padding(bottom = 50.dp).size(72.dp).background(Color.White.copy(0.15f), CircleShape).border(2.dp, Color.White, CircleShape)) { Icon(Icons.Default.Camera, null, tint = Color.White, Modifier.size(36.dp)) }
+                IconButton(
+                    onClick = { isSnapshotFlashing = true; viewModel.updateNews("Snapshot saved.") }, 
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 50.dp).size(72.dp).background(Color.White.copy(0.15f), CircleShape).border(2.dp, Color.White, CircleShape)
+                ) { 
+                    Icon(Icons.Default.Camera, null, tint = Color.White, modifier = Modifier.size(36.dp)) 
+                }
                 Text("PHOTO MODE ACTIVE", color = Color.White.copy(0.4f), fontWeight = FontWeight.Black, fontSize = 10.sp, modifier = Modifier.align(Alignment.TopCenter).padding(top = 24.dp), letterSpacing = 4.sp)
             }
         }
 
-        if (isSnapshotFlashing) { Box(Modifier.fillMaxSize().background(Color.White)); LaunchedEffect(Unit) { delay(80); isSnapshotFlashing = false } }
+        if (isSnapshotFlashing) { 
+            Box(Modifier.fillMaxSize().background(Color.White))
+            LaunchedEffect(Unit) { delay(80); isSnapshotFlashing = false } 
+        }
 
         if (!isPhotoMode) {
-            Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
-                selectedBuilding?.let { b -> GlassInspectorCard(b, gameState.money >= b.cost, { onBuild(b) }, onBuildInView); Spacer(Modifier.height(14.dp)) }
-                GlassBuildDock(buildingCatalog, selectedBuilding, { selectedBuilding = it }, { buildingCatalog.firstOrNull { it.category == BuildingCategory.Infrastructure }?.let { onBuild(it) } }, gameState.population)
+            Column(
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(), 
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                selectedBuilding?.let { b -> 
+                    GlassInspectorCard(b, gameState.money >= b.cost, { onBuild(b) }, onBuildInView)
+                    Spacer(Modifier.height(14.dp)) 
+                }
+                GlassBuildDock(
+                    catalog = buildingCatalog, 
+                    selected = selectedBuilding, 
+                    onSelect = { selectedBuilding = it }, 
+                    onQuickRoad = { buildingCatalog.firstOrNull { it.category == BuildingCategory.Infrastructure }?.let { onBuild(it) } }, 
+                    pop = gameState.population
+                )
             }
         }
-        Box(Modifier.align(Alignment.TopEnd).padding(top = 78.dp, end = 18.dp)) { TimeOfDayBadge(gameState.dayTime, isNight) }
-        GlassMinimap(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 100.dp).size(96.dp), placedItems, roadSegments, vehicles, Position(0f, 0f, 0f))
+        
+        Box(modifier = Modifier.align(Alignment.TopEnd).padding(top = 78.dp, end = 18.dp)) { 
+            TimeOfDayBadge(gameState.dayTime, isNight) 
+        }
+        
+        GlassMinimap(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 100.dp).size(96.dp), 
+            items = placedItems, 
+            roads = roadSegments, 
+            vehicles = vehicles, 
+            center = Position(0f, 0f, 0f)
+        )
     }
 }
 
@@ -378,10 +505,15 @@ private fun GlassTopBar(gameState: GameState, isNight: Boolean, isPaused: Boolea
     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         GlassPanel(shape = RoundedCornerShape(14.dp)) {
             Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, Modifier.size(32.dp)) { Icon(Icons.Default.ArrowBack, null, tint = Color.White, Modifier.size(16.dp)) }
-                Column { Text(gameState.cityName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp); Text(gameState.rank.uppercase(), color = HUDColors.AmaravatiTeal, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold) }
+                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.ArrowBack, null, tint = Color.White, Modifier.size(16.dp)) }
+                Column { 
+                    Text(gameState.cityName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    Text(gameState.rank.uppercase(), color = HUDColors.AmaravatiTeal, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold) 
+                }
                 Spacer(Modifier.width(12.dp))
-                Box(Modifier.size(32.dp).background(HUDColors.AmaravatiGlow, CircleShape), contentAlignment = Alignment.Center) { Text("${gameState.sustainabilityScore}", color = HUDColors.AmaravatiTeal, fontWeight = FontWeight.Black, fontSize = 11.sp) }
+                Box(Modifier.size(32.dp).background(HUDColors.AmaravatiGlow, CircleShape), contentAlignment = Alignment.Center) { 
+                    Text("${gameState.sustainabilityScore}", color = HUDColors.AmaravatiTeal, fontWeight = FontWeight.Black, fontSize = 11.sp) 
+                }
             }
         }
         GlassPanel(shape = RoundedCornerShape(14.dp)) {
@@ -392,7 +524,7 @@ private fun GlassTopBar(gameState: GameState, isNight: Boolean, isPaused: Boolea
                     ResourceIcon(Icons.Default.FlashOn, gameState.power, Color(0xFFFFD54F))
                     ResourceIcon(Icons.Default.WaterDrop, gameState.water, Color(0xFF4FC3F7))
                 }
-                IconButton(onClick = onTogglePause, Modifier.size(24.dp)) { Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, null, tint = Color.White, Modifier.size(16.dp)) }
+                IconButton(onClick = onTogglePause, modifier = Modifier.size(24.dp)) { Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, null, tint = Color.White, Modifier.size(16.dp)) }
             }
         }
     }
@@ -400,17 +532,21 @@ private fun GlassTopBar(gameState: GameState, isNight: Boolean, isPaused: Boolea
 
 @Composable
 private fun GlassStatPill(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = color, Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text(value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+    Row(verticalAlignment = Alignment.CenterVertically) { 
+        Icon(icon, null, tint = color, Modifier.size(14.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) 
+    }
 }
 
 @Composable
 private fun ResourceIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, level: Int, color: Color) {
-    Icon(icon, null, tint = if (level < 30) HUDColors.ResourceCritical else color.copy(0.9f), Modifier.size(15.dp))
+    Icon(icon, null, tint = if (level < 30) HUDColors.ResourceCritical else color.copy(alpha = 0.9f), Modifier.size(15.dp))
 }
 
 @Composable
 private fun GlassNewsTicker(news: String, isNight: Boolean) {
-    GlassPanel(Modifier.fillMaxWidth().padding(horizontal = 48.dp), RoundedCornerShape(10.dp)) {
+    GlassPanel(modifier = Modifier.fillMaxWidth().padding(horizontal = 48.dp), shape = RoundedCornerShape(10.dp)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(6.dp).background(if (isNight) Color(0xFF4FC3F7) else Color.Red, CircleShape))
             Spacer(Modifier.width(10.dp))
@@ -423,28 +559,49 @@ private fun GlassNewsTicker(news: String, isNight: Boolean) {
 private fun GlassGoalTracker(modifier: Modifier, activeGoal: String, population: Int) {
     GlassPanel(modifier, RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.EmojiEvents, null, tint = HUDColors.AmaravatiTeal, Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("OBJECTIVE", color = HUDColors.AmaravatiTeal, fontSize = 9.sp, fontWeight = FontWeight.Black) }
+            Row(verticalAlignment = Alignment.CenterVertically) { 
+                Icon(Icons.Default.EmojiEvents, null, tint = HUDColors.AmaravatiTeal, Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("OBJECTIVE", color = HUDColors.AmaravatiTeal, fontSize = 9.sp, fontWeight = FontWeight.Black) 
+            }
             Text(activeGoal, color = Color.White.copy(0.85f), fontSize = 11.sp, modifier = Modifier.widthIn(max = 160.dp))
             Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth(0.85f).height(3.dp).background(Color.White.copy(0.1f), CircleShape)) { Box(Modifier.fillMaxWidth((population.coerceIn(50, 1500) - 50) / 1450f).fillMaxHeight().background(HUDColors.AmaravatiTeal, CircleShape)) }
+            Box(Modifier.fillMaxWidth(0.85f).height(3.dp).background(Color.White.copy(0.1f), CircleShape)) { 
+                Box(Modifier.fillMaxWidth((population.coerceIn(50, 1500) - 50) / 1450f).fillMaxHeight().background(HUDColors.AmaravatiTeal, CircleShape)) 
+            }
         }
     }
 }
 
 @Composable
 private fun GlassInspectorCard(building: BuildingDefinition, canAfford: Boolean, onBuild: () -> Unit, onBuildInView: () -> Unit) {
-    GlassPanel(Modifier.widthIn(max = 280.dp).padding(horizontal = 10.dp), RoundedCornerShape(22.dp)) {
+    GlassPanel(modifier = Modifier.widthIn(max = 280.dp).padding(horizontal = 10.dp), shape = RoundedCornerShape(22.dp)) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column { Text(building.title.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp); Text(building.category.displayName.uppercase(), color = HUDColors.AmaravatiTeal, fontSize = 8.sp, fontWeight = FontWeight.Bold) }
-                Box(Modifier.background(HUDColors.AmaravatiGlow, CircleShape).padding(horizontal = 8.dp, vertical = 4.dp)) { Text("₹${formatMoney(building.cost)}", color = if (canAfford) HUDColors.AmaravatiTeal else HUDColors.ResourceCritical, fontSize = 10.sp, fontWeight = FontWeight.Black) }
+                Column { 
+                    Text(building.title.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    Text(building.category.displayName.uppercase(), color = HUDColors.AmaravatiTeal, fontSize = 8.sp, fontWeight = FontWeight.Bold) 
+                }
+                Box(Modifier.background(HUDColors.AmaravatiGlow, CircleShape).padding(horizontal = 8.dp, vertical = 4.dp)) { 
+                    Text("₹${formatMoney(building.cost)}", color = if (canAfford) HUDColors.AmaravatiTeal else HUDColors.ResourceCritical, fontSize = 10.sp, fontWeight = FontWeight.Black) 
+                }
             }
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { ImpactBadge(Icons.Default.People, building.populationImpact, Color(0xFF81D4FA)); ImpactBadge(Icons.Default.SentimentSatisfied, building.happinessImpact, HUDColors.AmaravatiTeal); ImpactBadge(Icons.Default.FlashOn, building.powerImpact, Color(0xFFFFD54F)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { 
+                ImpactBadge(Icons.Default.People, building.populationImpact, Color(0xFF81D4FA))
+                ImpactBadge(Icons.Default.SentimentSatisfied, building.happinessImpact, HUDColors.AmaravatiTeal)
+                ImpactBadge(Icons.Default.FlashOn, building.powerImpact, Color(0xFFFFD54F)) 
+            }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onBuild, enabled = canAfford, modifier = Modifier.weight(1.3f).height(42.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = HUDColors.AmaravatiTeal, contentColor = Color(0xFF02101F))) { Text("CONSTRUCT", fontWeight = FontWeight.Black, fontSize = 11.sp) }
-                OutlinedButton(onClick = onBuildInView, enabled = canAfford, modifier = Modifier.weight(1f).height(42.dp), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, HUDColors.AmaravatiTeal.copy(0.5f))) { Text("VIEW", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = HUDColors.AmaravatiTeal) }
+                Button(onClick = onBuild, enabled = canAfford, modifier = Modifier.weight(1.3f).height(42.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = HUDColors.AmaravatiTeal, contentColor = Color(0xFF02101F))) { 
+                    Text("CONSTRUCT", fontWeight = FontWeight.Black, fontSize = 11.sp) 
+                }
+                OutlinedButton(onClick = onBuildInView, enabled = canAfford, modifier = Modifier.weight(1f).height(42.dp), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, HUDColors.AmaravatiTeal.copy(0.5f))) { 
+                    Icon(Icons.Default.Visibility, null, modifier = Modifier.size(14.dp), tint = HUDColors.AmaravatiTeal)
+                    Spacer(Modifier.width(4.dp))
+                    Text("VIEW", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = HUDColors.AmaravatiTeal) 
+                }
             }
         }
     }
@@ -453,7 +610,13 @@ private fun GlassInspectorCard(building: BuildingDefinition, canAfford: Boolean,
 @Composable
 private fun ImpactBadge(icon: androidx.compose.ui.graphics.vector.ImageVector, value: Int, color: Color) {
     if (value == 0) return
-    Surface(color = color.copy(0.13f), shape = RoundedCornerShape(7.dp)) { Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = color, modifier = Modifier.size(11.dp)); Spacer(Modifier.width(2.dp)); Text(if (value > 0) "+$value" else "$value", color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold) } }
+    Surface(color = color.copy(0.13f), shape = RoundedCornerShape(7.dp)) { 
+        Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) { 
+            Icon(icon, null, tint = color, modifier = Modifier.size(11.dp))
+            Spacer(Modifier.width(2.dp))
+            Text(if (value > 0) "+$value" else "$value", color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold) 
+        } 
+    }
 }
 
 @Composable
@@ -463,18 +626,36 @@ private fun GlassBuildDock(catalog: List<BuildingDefinition>, selected: Building
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 12.dp)) {
         GlassPanel(shape = CircleShape) {
             LazyRow(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                items(cats) { c -> Box(Modifier.clip(CircleShape).background(if (selCat == c) HUDColors.AmaravatiTeal else Color.Transparent).clickable { selCat = c }.padding(horizontal = 12.dp, vertical = 6.dp)) { Text(c.displayName.uppercase(), color = if (selCat == c) Color(0xFF02101F) else Color.White.copy(0.6f), fontSize = 9.sp, fontWeight = FontWeight.Black) } }
-                Box(Modifier.size(30.dp).clip(CircleShape).background(HUDColors.AmaravatiGlow).clickable { onQuickRoad() }, contentAlignment = Alignment.Center) { Icon(Icons.Default.AddRoad, null, tint = HUDColors.AmaravatiTeal, Modifier.size(16.dp)) }
+                items(cats) { c -> 
+                    Box(Modifier.clip(CircleShape).background(if (selCat == c) HUDColors.AmaravatiTeal else Color.Transparent).clickable { selCat = c }.padding(horizontal = 12.dp, vertical = 6.dp)) { 
+                        Text(c.displayName.uppercase(), color = if (selCat == c) Color(0xFF02101F) else Color.White.copy(0.6f), fontSize = 9.sp, fontWeight = FontWeight.Black) 
+                    } 
+                }
+                Box(Modifier.size(30.dp).clip(CircleShape).background(HUDColors.AmaravatiGlow).clickable { onQuickRoad() }, contentAlignment = Alignment.Center) { 
+                    Icon(Icons.Default.AddRoad, null, tint = HUDColors.AmaravatiTeal, Modifier.size(16.dp)) 
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
-        GlassPanel(Modifier.fillMaxWidth(0.95f), RoundedCornerShape(24.dp)) {
+        GlassPanel(modifier = Modifier.fillMaxWidth(0.95f), shape = RoundedCornerShape(24.dp)) {
             LazyRow(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(catalog.filter { it.category == selCat }) { b ->
                     val locked = pop < b.unlockPopulation
-                    Column(Modifier.width(80.dp).clip(RoundedCornerShape(16.dp)).background(if (selected?.id == b.id) HUDColors.AmaravatiGlow else Color.White.copy(0.04f)).border(if (selected?.id == b.id) BorderStroke(1.5.dp, HUDColors.AmaravatiTeal) else BorderStroke(0.dp, Color.Transparent), RoundedCornerShape(16.dp)).clickable(enabled = !locked) { onSelect(b) }.padding(8.dp), Alignment.CenterHorizontally) {
-                        Box(Modifier.size(34.dp).background(Color.White.copy(0.05f), CircleShape), Alignment.Center) { Icon(Icons.Default.Apartment, null, tint = if (locked) Color.Gray else Color.White.copy(0.7f), modifier = Modifier.size(18.dp)); if (locked) Icon(Icons.Default.Lock, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
-                        Text(if (locked) "LOCKED" else b.title.uppercase(), color = if (locked) Color.Gray else Color.White, fontWeight = FontWeight.Black, fontSize = 8.sp, maxLines = 1); Text(if (locked) "POP ${b.unlockPopulation}" else "₹${formatMoney(b.cost)}", color = if (locked) Color.Red.copy(0.5f) else HUDColors.AmaravatiTeal.copy(0.8f), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    Column(
+                        modifier = Modifier.width(80.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (selected?.id == b.id) HUDColors.AmaravatiGlow else Color.White.copy(0.04f))
+                            .border(if (selected?.id == b.id) BorderStroke(1.5.dp, HUDColors.AmaravatiTeal) else BorderStroke(0.dp, Color.Transparent), RoundedCornerShape(16.dp))
+                            .clickable(enabled = !locked) { onSelect(b) }
+                            .padding(8.dp), 
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(Modifier.size(34.dp).background(Color.White.copy(0.05f), CircleShape), Alignment.Center) { 
+                            Icon(Icons.Default.Apartment, null, tint = if (locked) Color.Gray else Color.White.copy(0.7f), modifier = Modifier.size(18.dp))
+                            if (locked) Icon(Icons.Default.Lock, null, tint = Color.White, modifier = Modifier.size(12.dp)) 
+                        }
+                        Text(if (locked) "LOCKED" else b.title.uppercase(), color = if (locked) Color.Gray else Color.White, fontWeight = FontWeight.Black, fontSize = 8.sp, maxLines = 1)
+                        Text(if (locked) "POP ${b.unlockPopulation}" else "₹${formatMoney(b.cost)}", color = if (locked) Color.Red.copy(0.5f) else HUDColors.AmaravatiTeal.copy(0.8f), fontSize = 8.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -496,37 +677,22 @@ private fun TimeOfDayBadge(dayTime: Float, isNight: Boolean) {
 @Composable
 private fun GlassMinimap(modifier: Modifier, items: List<PlacedItem>, roads: List<RoadSegment>, vehicles: List<AnimatedVehicle>, center: Position) {
     val scale = 0.055f; val cx = 48f; val cy = 48f
-    Box(modifier.clip(CircleShape).border(1.5.dp, HUDColors.AmaravatiGlow, CircleShape)) {
+    Box(modifier = modifier.clip(CircleShape).border(1.5.dp, HUDColors.AmaravatiGlow, CircleShape)) {
         Canvas(Modifier.fillMaxSize().background(HUDColors.GlassBackground)) {
-            roads.forEach { s -> val x = cx + (s.position.x - center.x) * scale; val y = cy + (s.position.z - center.z) * scale; val r = Math.toRadians(s.rotationY.toDouble()); drawLine(HUDColors.AmaravatiTeal.copy(0.4f), Offset(x - cos(r).toFloat() * 5, y - sin(r).toFloat() * 5), Offset(x + cos(r).toFloat() * 5, y + sin(r).toFloat() * 5), 2f) }
-            items.filter { it.definition.cost > 50 }.forEach { i -> drawCircle(HUDColors.AmaravatiTeal.copy(0.7f), 2.5f, Offset(cx + (i.position.x - center.x) * scale, cy + (i.position.z - center.z) * scale)) }
-            vehicles.forEach { v -> val p = computeVehiclePosition(v, roads); drawCircle(Color.White, 1.2f, Offset(cx + (p.x - center.x) * scale, cy + (p.z - center.z) * scale)) }
+            roads.forEach { s -> 
+                val x = cx + (s.position.x - center.x) * scale
+                val y = cy + (s.position.z - center.z) * scale
+                val r = Math.toRadians(s.rotationY.toDouble())
+                drawLine(HUDColors.AmaravatiTeal.copy(0.4f), Offset(x - cos(r).toFloat() * 5, y - sin(r).toFloat() * 5), Offset(x + cos(r).toFloat() * 5, y + sin(r).toFloat() * 5), 2f) 
+            }
+            items.filter { it.definition.cost > 50 }.forEach { i -> 
+                drawCircle(HUDColors.AmaravatiTeal.copy(0.7f), 2.5f, Offset(cx + (i.position.x - center.x) * scale, cy + (i.position.z - center.z) * scale)) 
+            }
+            vehicles.forEach { v -> 
+                val p = computeVehiclePosition(v, roads)
+                drawCircle(Color.White, 1.2f, Offset(cx + (p.x - center.x) * scale, cy + (p.z - center.z) * scale)) 
+            }
             drawCircle(HUDColors.AmaravatiTeal.copy(0.1f), size.width/2, style = Stroke(1f))
-        }
-    }
-}
-
-private fun formatMoney(m: Long): String = when { m >= 1_000_000 -> "${(m / 100000) / 10.0}M"; m >= 10_000 -> "${m / 1000}k"; else -> m.toString() }
-
-private object HUDColors {
-    val GlassBackground = Color(0xFF0A1525).copy(alpha = 0.68f)
-    val GlassBorder = Color.White.copy(alpha = 0.16f)
-    val AmaravatiTeal = Color(0xFF58DBB8)
-    val AmaravatiGlow = Color(0xFF58DBB8).copy(alpha = 0.25f)
-    val ResourceCritical = Color(0xFFFF7043)
-}
-
-@Composable
-private fun GlassPanel(modifier: Modifier = Modifier, shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(18.dp), border: BorderStroke? = BorderStroke(0.6.dp, HUDColors.GlassBorder), content: @Composable () -> Unit) {
-    Surface(modifier = modifier, color = HUDColors.GlassBackground, shape = shape, border = border, content = content)
-}
-
-@Composable
-fun NativeDebugOverlay(modifier: Modifier, placedCount: Int, visibleNodes: Int, simFps: Float = 60f) {
-    Surface(modifier.padding(8.dp), Color.Black.copy(0.6f), RoundedCornerShape(4.dp)) {
-        Column(Modifier.padding(6.dp)) {
-            Text("NATIVE DEBUG", color = Color(0xFF58DBB8), fontSize = 9.sp, fontWeight = FontWeight.Black)
-            Text("Placed: $placedCount  Nodes: $visibleNodes", Color.White, fontSize = 8.sp)
         }
     }
 }
