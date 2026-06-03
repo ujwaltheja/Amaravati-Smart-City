@@ -58,7 +58,8 @@ object BuildingCatalog {
                 happinessImpact = 5,
                 powerImpact = -45,
                 waterImpact = -25,
-                wasteImpact = 12
+                wasteImpact = 12,
+                unlockPopulation = 500
             ),
             BuildingDefinition(
                 id = "government-secretariat",
@@ -70,7 +71,8 @@ object BuildingCatalog {
                 sustainabilityImpact = 5,
                 powerImpact = -50,
                 waterImpact = -30,
-                wasteImpact = 10
+                wasteImpact = 10,
+                unlockPopulation = 1000
             ),
             BuildingDefinition(
                 id = "emergency-police",
@@ -81,7 +83,8 @@ object BuildingCatalog {
                 happinessImpact = 12,
                 powerImpact = -10,
                 waterImpact = -5,
-                wasteImpact = 2
+                wasteImpact = 2,
+                unlockPopulation = 150
             ),
             BuildingDefinition(
                 id = "emergency-hospital",
@@ -92,7 +95,8 @@ object BuildingCatalog {
                 happinessImpact = 20,
                 powerImpact = -30,
                 waterImpact = -25,
-                wasteImpact = 10
+                wasteImpact = 10,
+                unlockPopulation = 300
             ),
             BuildingDefinition(
                 id = "industrial-warehouse",
@@ -115,7 +119,8 @@ object BuildingCatalog {
                 sustainabilityImpact = -10,
                 powerImpact = -80,
                 waterImpact = -60,
-                wasteImpact = 40
+                wasteImpact = 40,
+                unlockPopulation = 400
             ),
             BuildingDefinition(
                 id = "utility-solar-farm",
@@ -143,7 +148,8 @@ object BuildingCatalog {
                 cost = 6000,
                 sustainabilityImpact = 8,
                 wasteImpact = -100,
-                powerImpact = -20
+                powerImpact = -20,
+                unlockPopulation = 200
             ),
             BuildingDefinition(
                 id = "infrastructure-road",

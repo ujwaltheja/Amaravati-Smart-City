@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -339,13 +340,23 @@ fun AmaravatiGameSurface(
 
             viewModel.advanceSimulation(dt)
 
-            // Update vehicle animation (realistic traffic)
-            // Pure native logic: occasionally "choose" a player road to follow for a while (makes the city feel alive and player-built roads meaningful).
+            // Update vehicle animation (realistic traffic + Traffic Jams)
             if (!isPaused && vehicles.isNotEmpty()) {
                 val speedMul = simSpeed
                 val currentRoads = roadSegments.toList()
-                vehicles.replaceAll { v ->
-                    var newPhase = v.phase + (v.speed * 0.011f * dt * speedMul)
+                
+                // Traffic Jam Logic: Check distance to vehicle ahead
+                val newVehicles = vehicles.map { v ->
+                    var currentSpeed = v.speed
+                    val vehicleAhead = vehicles.firstOrNull { other -> 
+                        other.lane == v.lane && other.id != v.id && 
+                        other.phase > v.phase && (other.phase - v.phase) < 0.05f 
+                    }
+                    if (vehicleAhead != null) {
+                        currentSpeed = vehicleAhead.speed * 0.5f // slow down
+                    }
+
+                    var newPhase = v.phase + (currentSpeed * 0.011f * dt * speedMul)
                     if (newPhase > 1.05f) newPhase = -0.08f
 
                     var newRoadId = v.currentRoadId
@@ -355,14 +366,18 @@ fun AmaravatiGameSurface(
                     }
                     v.copy(phase = newPhase, currentRoadId = newRoadId)
                 }
+                vehicles.clear()
+                vehicles.addAll(newVehicles)
 
                 // Update moving pedestrians (pure native, slower on sidewalks)
                 if (pedestrians.isNotEmpty()) {
-                    pedestrians.replaceAll { p ->
+                    val newPeds = pedestrians.map { p ->
                         var newPhase = p.phase + (p.speed * 0.008f * dt * speedMul)
                         if (newPhase > 1.05f) newPhase = -0.08f
                         p.copy(phase = newPhase)
                     }
+                    pedestrians.clear()
+                    pedestrians.addAll(newPeds)
                 }
             }
         }
@@ -377,6 +392,10 @@ fun AmaravatiGameSurface(
             else if (s.trafficDensity > 78) viewModel.updateNews("Traffic advisory: Consider adding more road infrastructure.")
             else if (s.power < 50) viewModel.updateNews("Power shortage reported! Consider building more Solar Farms.")
             else if (s.waste > 60) viewModel.updateNews("Waste accumulation reaching critical levels. More management needed.")
+            
+            if (currentNews.contains("FIRE") || currentNews.contains("emergency")) {
+                soundManager.playDisasterSound()
+            }
         }
     }
 
@@ -384,12 +403,18 @@ fun AmaravatiGameSurface(
     val day = gameState.dayTime
     val isNight = day < 6.2f || day > 19.4f
     val dawnDusk = (day in 5.5f..7.2f) || (day in 18.0f..20.0f)
+    
+    // Update audio ambiance based on time
+    LaunchedEffect(isNight) {
+        soundManager.updateAmbiance(isNight)
+    }
 
     val onBuild: (BuildingDefinition) -> Unit = { building ->
         if (gameState.money >= building.cost && building.assetPath.isNotBlank()) {
             val now = System.currentTimeMillis()
             if (now - lastPlacementTime >= 140) {
                 lastPlacementTime = now
+                soundManager.playBuildSound()
 
                 // Smart placement around existing city - spiral/offset pattern for organic growth
                 val count = placedItems.count { it.definition.cost > 0 }
@@ -476,8 +501,15 @@ fun AmaravatiGameSurface(
         }
     }
 
+    // Sound Manager (Option 2)
+    val soundManager = remember { SoundManager(context) }
+    DisposableEffect(Unit) {
+        onDispose { soundManager.release() }
+    }
+
     var isPhotoMode by remember { mutableStateOf(false) }
     var isSnapshotFlashing by remember { mutableStateOf(false) }
+    var showHeatmap by remember { mutableStateOf(false) } // Option 1: Data Viz
 
     // ... existing background color logic ...
     val bgTop = when {
@@ -543,7 +575,18 @@ fun AmaravatiGameSurface(
                 }
             }
 
-            // Ground / city base tiles + placed buildings / props
+            // Heatmap Overlay (Option 1)
+            if (showHeatmap) {
+                placedItems.filter { it.definition.powerImpact != 0 || it.definition.pollutionImpact != 0 }.forEach { item ->
+                    key("heatmap-${item.id}") {
+                        // We would use an unlit semi-transparent plane or box here.
+                        // Since we rely on standard glTF, we fallback to drawing an overlay or using pure native canvas in UI.
+                        // Here we simulate it by placing a colored native node if we had a primitive generator.
+                        // For pure Compose, the Minimap handles data viz.
+                    }
+                }
+            }
+
             // Pure native culling first (distance + rough view) — critical for performance on mobile as world grows.
             placedItems.forEach { item ->
                 if (!shouldRenderItem(item.position)) return@forEach
@@ -685,6 +728,16 @@ fun AmaravatiGameSurface(
             }
             if (!isPhotoMode) {
                 Surface(
+                    onClick = { showHeatmap = !showHeatmap },
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (showHeatmap) Color(0xFF58DBB8) else Color.Black.copy(0.55f),
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Map, null, tint = if (showHeatmap) Color.Black else Color.White, modifier = Modifier.size(21.dp))
+                    }
+                }
+                Surface(
                     onClick = { isBulldozeMode = !isBulldozeMode; if (isBulldozeMode && placedItems.isNotEmpty()) onDemolishLast() },
                     shape = RoundedCornerShape(10.dp),
                     color = if (isBulldozeMode) Color(0xFFFF4B4B).copy(0.9f) else Color.Black.copy(0.55f),
@@ -790,7 +843,8 @@ fun AmaravatiGameSurface(
                         val road = buildingCatalog.firstOrNull { it.category == BuildingCategory.Infrastructure }
                             ?: buildingCatalog.firstOrNull()
                         road?.let { onBuild(it) }
-                    }
+                    },
+                    currentPopulation = gameState.population
                 )
             }
         }
@@ -1117,7 +1171,8 @@ private fun GameBuildBarRealistic(
     selectedBuilding: BuildingDefinition?,
     onSelectedBuilding: (BuildingDefinition) -> Unit,
     onBuild: (BuildingDefinition) -> Unit,
-    onQuickRoad: () -> Unit
+    onQuickRoad: () -> Unit,
+    currentPopulation: Int
 ) {
     val categories = remember(buildingCatalog) { buildingCatalog.map { it.category }.distinct() }
     var selectedCategory by remember { mutableStateOf(categories.firstOrNull { it == BuildingCategory.Infrastructure } ?: categories.firstOrNull()) }
@@ -1173,10 +1228,11 @@ private fun GameBuildBarRealistic(
             ) {
                 items(buildingCatalog.filter { it.category == selectedCategory }) { b ->
                     val isSel = selectedBuilding?.id == b.id
-                    val accent = Color(0xFF58DBB8)
+                    val isLocked = currentPopulation < b.unlockPopulation
+                    val accent = if (isLocked) Color.Gray else Color(0xFF58DBB8)
 
                     Surface(
-                        onClick = { onSelectedBuilding(b) },
+                        onClick = { if (!isLocked) onSelectedBuilding(b) },
                         shape = RoundedCornerShape(11.dp),
                         color = if (isSel) accent.copy(0.16f) else Color.White.copy(0.035f),
                         border = if (isSel) BorderStroke(1.5.dp, accent) else null,
@@ -1188,8 +1244,8 @@ private fun GameBuildBarRealistic(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                b.title,
-                                color = if (isSel) accent else Color.White,
+                                if (isLocked) "LOCKED" else b.title,
+                                color = if (isSel) accent else if (isLocked) Color.Gray else Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 10.sp,
                                 maxLines = 1,
@@ -1197,13 +1253,13 @@ private fun GameBuildBarRealistic(
                             )
                             Spacer(Modifier.height(1.dp))
                             Text(
-                                "₹${b.cost}",
-                                color = if (isSel) accent.copy(0.85f) else Color.White.copy(0.5f),
+                                if (isLocked) "Pop ${b.unlockPopulation}" else "₹${b.cost}",
+                                color = if (isSel) accent.copy(0.85f) else if (isLocked) Color.Red.copy(0.7f) else Color.White.copy(0.5f),
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Medium
                             )
                             // Mini impact line
-                            if (b.populationImpact != 0 || b.happinessImpact != 0) {
+                            if (!isLocked && (b.populationImpact != 0 || b.happinessImpact != 0)) {
                                 Text(
                                     listOfNotNull(
                                         if (b.populationImpact != 0) "👥${if (b.populationImpact>0) "+" else ""}${b.populationImpact}" else null,
@@ -1220,6 +1276,7 @@ private fun GameBuildBarRealistic(
         }
     }
 }
+
 
 @Composable
 private fun TimeOfDayBadge(dayTime: Float, isNight: Boolean) {
