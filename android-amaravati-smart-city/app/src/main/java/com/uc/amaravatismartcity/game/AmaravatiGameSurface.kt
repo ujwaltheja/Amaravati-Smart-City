@@ -21,14 +21,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -119,6 +120,50 @@ private fun snapPlacement(pos: Position, gridSize: Float = 2.0f): Position {
     )
 }
 
+private fun screenTapToGrid(offset: Offset, size: IntSize): Position {
+    if (size.width <= 0 || size.height <= 0) return Position(0f, 0.02f, 0f)
+    val normalizedX = (offset.x / size.width) - 0.5f
+    val normalizedY = (offset.y / size.height) - 0.5f
+    return snapPlacement(
+        Position(
+            x = normalizedX * 34f,
+            y = 0.02f,
+            z = normalizedY * 28f
+        )
+    )
+}
+
+private fun placementFootprint(definition: BuildingDefinition): Float {
+    return when (definition.category) {
+        BuildingCategory.Infrastructure -> 1.8f
+        BuildingCategory.GreenSpace -> 3.8f
+        BuildingCategory.Government -> 5.2f
+        BuildingCategory.Industrial -> 4.8f
+        else -> 3.2f
+    }
+}
+
+private fun canPlaceAt(position: Position, definition: BuildingDefinition, items: List<PlacedItem>): Boolean {
+    val minDistance = placementFootprint(definition)
+    return items.none { item ->
+        item.definition.cost > 0 &&
+            kotlin.math.hypot(item.position.x - position.x, item.position.z - position.z) < minDistance
+    }
+}
+
+private fun nearestBuildableItem(position: Position, items: List<PlacedItem>): PlacedItem? {
+    return items
+        .filter { it.definition.cost > 0 }
+        .minByOrNull { item ->
+            val dx = item.position.x - position.x
+            val dz = item.position.z - position.z
+            dx * dx + dz * dz
+        }
+        ?.takeIf { item ->
+            kotlin.math.hypot(item.position.x - position.x, item.position.z - position.z) < 4.5f
+        }
+}
+
 @Composable
 private fun GlassPanel(
     modifier: Modifier = Modifier,
@@ -169,6 +214,9 @@ fun AmaravatiGameSurface(
     var isPhotoMode by remember { mutableStateOf(false) }
     var isSnapshotFlashing by remember { mutableStateOf(false) }
     var showHeatmap by remember { mutableStateOf(false) }
+    var sceneSize by remember { mutableStateOf(IntSize.Zero) }
+    var placementPreview by remember { mutableStateOf<Position?>(null) }
+    var placementRotation by remember { mutableStateOf(0f) }
 
     val carAssets = remember(assetPaths) {
         val preferred = listOf("sedan.glb", "suv.glb", "taxi.glb", "hatchback-sports.glb", "delivery.glb", "van.glb", "police.glb", "truck.glb", "race.glb", "ambulance.glb")
@@ -262,43 +310,38 @@ fun AmaravatiGameSurface(
     val dawnDusk = (day in 6.0f..7.5f) || (day in 18.5f..20.0f)
     LaunchedEffect(isNight) { soundManager.updateAmbiance(isNight) }
 
-    val onBuild: (BuildingDefinition) -> Unit = { b ->
+    val placeBuildingAt: (BuildingDefinition, Position) -> Unit = { b, rawPosition ->
         if (gameState.money >= b.cost && b.assetPath.isNotBlank()) {
             val now = System.currentTimeMillis()
             if (now - lastPlacementTime >= 150) {
                 lastPlacementTime = now
                 soundManager.playBuildSound()
-                val count = placedItems.size
-                val px = (sin(count * 0.7) * (9f + count * 0.1f)).toFloat()
-                val pz = (cos(count * 0.7) * (9f + count * 0.1f)).toFloat()
-                val pos = snapPlacement(Position(px, 0f, pz))
-                viewModel.addPlacedItem(PlacedItem(id = now, definition = b, position = pos, rotationY = (count * 15f) % 360f))
+                val pos = snapPlacement(rawPosition)
+                viewModel.addPlacedItem(PlacedItem(id = now, definition = b, position = pos, rotationY = placementRotation))
                 viewModel.updateMoney(-b.cost)
                 viewModel.updatePopulation(b.populationImpact)
                 viewModel.updateHappiness(b.happinessImpact)
                 if (b.category == BuildingCategory.Infrastructure) {
-                    roadSegments += RoadSegment(id = now, position = Position(pos.x, 0.01f, pos.z), rotationY = (count * 15f) % 360f)
+                    roadSegments += RoadSegment(id = now, position = Position(pos.x, 0.01f, pos.z), rotationY = placementRotation)
                 }
+                placementPreview = null
             }
         }
     }
 
-    val onDemolishLast: () -> Unit = {
-        placedItems.lastOrNull { it.definition.cost > 0 }?.let { removable ->
+    val demolishItem: (PlacedItem) -> Unit = { removable ->
             viewModel.removePlacedItem(removable)
             roadSegments.removeAll { it.id == removable.id }
             viewModel.updateMoney((removable.definition.cost * 0.5f).toLong())
-        }
     }
 
     val onBuildInView: () -> Unit = {
         selectedBuilding?.let { b ->
-            if (gameState.money >= b.cost) {
-                val now = System.currentTimeMillis()
-                val pos = snapPlacement(Position(0f, 0.02f, -12f))
-                viewModel.addPlacedItem(PlacedItem(id = now, definition = b, position = pos))
-                viewModel.updateMoney(-b.cost)
-                if (b.category == BuildingCategory.Infrastructure) roadSegments += RoadSegment(id = now, position = Position(pos.x, 0.01f, pos.z))
+            val pos = placementPreview ?: Position(0f, 0.02f, -12f)
+            if (canPlaceAt(pos, b, placedItems)) {
+                placeBuildingAt(b, pos)
+            } else {
+                viewModel.updateNews("Placement blocked. Choose a clear grid tile.")
             }
         }
     }
@@ -308,7 +351,34 @@ fun AmaravatiGameSurface(
 
     Box(modifier = modifier.fillMaxSize().background(Brush.verticalGradient(listOf(bgTop, bgBot)))) {
         SceneView(
-            modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onLongPress = { onDemolishLast() }) },
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { sceneSize = it }
+                .pointerInput(selectedBuilding, placedItems, isBulldozeMode, sceneSize) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            val pos = screenTapToGrid(offset, sceneSize)
+                            if (isBulldozeMode) {
+                                nearestBuildableItem(pos, placedItems)?.let { demolishItem(it) }
+                                    ?: viewModel.updateNews("No removable structure at that grid tile.")
+                                return@detectTapGestures
+                            }
+                            val selected = selectedBuilding ?: return@detectTapGestures
+                            placementPreview = pos
+                            if (gameState.money < selected.cost) {
+                                viewModel.updateNews("Insufficient funds for ${selected.title}.")
+                            } else if (canPlaceAt(pos, selected, placedItems)) {
+                                placeBuildingAt(selected, pos)
+                            } else {
+                                viewModel.updateNews("Placement blocked. Choose a clear grid tile.")
+                            }
+                        },
+                        onLongPress = { offset ->
+                            val pos = screenTapToGrid(offset, sceneSize)
+                            nearestBuildableItem(pos, placedItems)?.let { demolishItem(it) }
+                        }
+                    )
+                },
             engine = engine, modelLoader = modelLoader, cameraManipulator = cameraManipulator
         ) {
             val sunAngle = (day - 7f) * 15f
@@ -340,6 +410,22 @@ fun AmaravatiGameSurface(
                 key(v.id) {
                     val mi = remember(v.id, v.assetPath) { try { modelLoader.createModelInstance(v.assetPath) } catch (_: Exception) { null } }
                     if (mi != null) ModelNode(modelInstance = mi, scaleToUnits = v.scale, centerOrigin = Position(0f, 0f, 0f), position = pos, rotation = Position(0f, if(v.flip) 180f else 0f, 0f))
+                }
+            }
+            val preview = placementPreview
+            val selected = selectedBuilding
+            if (preview != null && selected != null && selected.assetPath.isNotBlank()) {
+                val previewInstance = remember(selected.id, selected.assetPath) {
+                    try { modelLoader.createModelInstance(selected.assetPath) } catch (_: Exception) { null }
+                }
+                if (previewInstance != null) {
+                    ModelNode(
+                        modelInstance = previewInstance,
+                        scaleToUnits = 1f,
+                        centerOrigin = Position(0f, 0f, 0f),
+                        position = Position(preview.x, 0.04f, preview.z),
+                        rotation = Position(0f, placementRotation, 0f)
+                    )
                 }
             }
         }
@@ -379,7 +465,8 @@ fun AmaravatiGameSurface(
             GlassPanel(shape = CircleShape) { IconButton(onClick = { isPhotoMode = !isPhotoMode }, Modifier.size(46.dp)) { Icon(if(isPhotoMode) Icons.Default.Close else Icons.Default.CameraAlt, null, tint = if (isPhotoMode) Color.White else HUDColors.AmaravatiTeal) } }
             if (!isPhotoMode) {
                 GlassPanel(shape = CircleShape) { IconButton(onClick = { showHeatmap = !showHeatmap }, Modifier.size(46.dp)) { Icon(Icons.Default.Map, null, tint = if (showHeatmap) HUDColors.AmaravatiTeal else Color.White) } }
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { isBulldozeMode = !isBulldozeMode; onDemolishLast() }, Modifier.size(46.dp)) { Icon(Icons.Default.Delete, null, tint = if (isBulldozeMode) Color.Red else Color.White) } }
+                GlassPanel(shape = CircleShape) { IconButton(onClick = { placementRotation = (placementRotation + 90f) % 360f }, Modifier.size(46.dp)) { Icon(Icons.Default.RotateRight, null, tint = Color.White) } }
+                GlassPanel(shape = CircleShape) { IconButton(onClick = { isBulldozeMode = !isBulldozeMode }, Modifier.size(46.dp)) { Icon(Icons.Default.Delete, null, tint = if (isBulldozeMode) Color.Red else Color.White) } }
                 Spacer(Modifier.height(6.dp))
                 GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.saveGame() }, Modifier.size(40.dp)) { Icon(Icons.Default.Save, null, tint = Color.White.copy(0.7f)) } }
                 GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.loadGame() }, Modifier.size(40.dp)) { Icon(Icons.Default.Restore, null, tint = Color.White.copy(0.7f)) } }
@@ -389,7 +476,7 @@ fun AmaravatiGameSurface(
         // --- PHOTO MODE ---
         if (isPhotoMode) {
             Box(Modifier.fillMaxSize()) {
-                IconButton(onClick = { isSnapshotFlashing = true; viewModel.updateNews("Snapshot saved.") }, Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp).size(80.dp).background(Color.White.copy(0.12f), CircleShape).border(2.5.dp, Color.White, CircleShape)) { Icon(Icons.Default.Camera, null, tint = Color.White, Modifier.size(40.dp)) }
+                IconButton(onClick = { isSnapshotFlashing = true; viewModel.updateNews("Snapshot saved.") }, Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp).size(80.dp).background(Color.White.copy(0.12f), CircleShape).border(2.5.dp, Color.White, CircleShape)) { Icon(Icons.Default.Camera, null, modifier = Modifier.size(40.dp), tint = Color.White) }
                 Text("PHOTO MODE", color = Color.White.copy(0.4f), fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopCenter).padding(top = 180.dp), letterSpacing = 6.sp)
             }
         }
@@ -404,14 +491,26 @@ fun AmaravatiGameSurface(
             ) {
                 if (selectedBuilding != null) {
                     val b = selectedBuilding!!
-                    GlassInspectorCard(b, gameState.money >= b.cost, { onBuild(b) }, onBuildInView)
+                    GlassInspectorCard(
+                        building = b,
+                        canAfford = gameState.money >= b.cost,
+                        previewPosition = placementPreview,
+                        canPlacePreview = placementPreview?.let { canPlaceAt(it, b, placedItems) } ?: true,
+                        onPreview = { placementPreview = Position(0f, 0.02f, -12f) },
+                        onBuildInView = onBuildInView
+                    )
                     Spacer(Modifier.height(16.dp))
                 }
                 GlassBuildDock(
                     catalog = buildingCatalog, 
                     selected = selectedBuilding, 
                     onSelect = { selectedBuilding = it }, 
-                    onQuickRoad = { buildingCatalog.firstOrNull { it.category == BuildingCategory.Infrastructure }?.let { onBuild(it) } }, 
+                    onQuickRoad = {
+                        buildingCatalog.firstOrNull { it.category == BuildingCategory.Infrastructure }?.let {
+                            selectedBuilding = it
+                            placementPreview = Position(0f, 0.02f, -12f)
+                        }
+                    }, 
                     pop = gameState.population
                 )
             }
@@ -430,7 +529,7 @@ private fun GlassTopBar(gameState: GameState, isNight: Boolean, isPaused: Boolea
     Row(Modifier.fillMaxWidth(0.96f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         GlassPanel(shape = RoundedCornerShape(16.dp)) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, modifier = Modifier.size(34.dp)) { Icon(Icons.Default.ArrowBack, null, tint = Color.White, Modifier.size(18.dp)) }
+                IconButton(onClick = onBack, modifier = Modifier.size(34.dp)) { Icon(Icons.Default.ArrowBack, null, modifier = Modifier.size(18.dp), tint = Color.White) }
                 Column { 
                     Text(gameState.cityName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp)
                     Text(gameState.rank.uppercase(), color = HUDColors.AmaravatiTeal, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold) 
@@ -449,7 +548,7 @@ private fun GlassTopBar(gameState: GameState, isNight: Boolean, isPaused: Boolea
                     ResourceIcon(Icons.Default.FlashOn, gameState.power, Color(0xFFFFD54F))
                     ResourceIcon(Icons.Default.WaterDrop, gameState.water, Color(0xFF4FC3F7))
                 }
-                IconButton(onClick = onTogglePause, modifier = Modifier.size(28.dp)) { Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, null, tint = Color.White, Modifier.size(18.dp)) }
+                IconButton(onClick = onTogglePause, modifier = Modifier.size(28.dp)) { Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, null, modifier = Modifier.size(18.dp), tint = Color.White) }
             }
         }
     }
@@ -458,7 +557,7 @@ private fun GlassTopBar(gameState: GameState, isNight: Boolean, isPaused: Boolea
 @Composable
 private fun GlassStatPill(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) { 
-        Icon(icon, null, tint = color, Modifier.size(15.dp))
+        Icon(icon, null, modifier = Modifier.size(15.dp), tint = color)
         Spacer(Modifier.width(5.dp))
         Text(value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold) 
     }
@@ -466,7 +565,7 @@ private fun GlassStatPill(icon: androidx.compose.ui.graphics.vector.ImageVector,
 
 @Composable
 private fun ResourceIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, level: Int, color: Color) {
-    Icon(icon, null, tint = if (level < 35) HUDColors.ResourceCritical else color.copy(alpha = 0.95f), Modifier.size(17.dp))
+    Icon(icon, null, modifier = Modifier.size(17.dp), tint = if (level < 35) HUDColors.ResourceCritical else color.copy(alpha = 0.95f))
 }
 
 @Composable
@@ -485,7 +584,7 @@ private fun GlassGoalTracker(modifier: Modifier, activeGoal: String, population:
     GlassPanel(modifier, RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { 
-                Icon(Icons.Default.EmojiEvents, null, tint = HUDColors.AmaravatiTeal, Modifier.size(18.dp))
+                Icon(Icons.Default.EmojiEvents, null, modifier = Modifier.size(18.dp), tint = HUDColors.AmaravatiTeal)
                 Spacer(Modifier.width(10.dp))
                 Text("DIRECTIVE", color = HUDColors.AmaravatiTeal, fontSize = 10.sp, fontWeight = FontWeight.Black) 
             }
@@ -499,7 +598,14 @@ private fun GlassGoalTracker(modifier: Modifier, activeGoal: String, population:
 }
 
 @Composable
-private fun GlassInspectorCard(building: BuildingDefinition, canAfford: Boolean, onBuild: () -> Unit, onBuildInView: () -> Unit) {
+private fun GlassInspectorCard(
+    building: BuildingDefinition,
+    canAfford: Boolean,
+    previewPosition: Position?,
+    canPlacePreview: Boolean,
+    onPreview: () -> Unit,
+    onBuildInView: () -> Unit
+) {
     GlassPanel(modifier = Modifier.widthIn(max = 300.dp).padding(horizontal = 12.dp), shape = RoundedCornerShape(26.dp)) {
         Column(Modifier.padding(18.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
@@ -519,13 +625,13 @@ private fun GlassInspectorCard(building: BuildingDefinition, canAfford: Boolean,
             }
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onBuild, enabled = canAfford, modifier = Modifier.weight(1.3f).height(46.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = HUDColors.AmaravatiTeal, contentColor = Color(0xFF02101F))) { 
-                    Text("CONSTRUCT", fontWeight = FontWeight.Black, fontSize = 12.sp) 
+                Button(onClick = onBuildInView, enabled = canAfford && canPlacePreview, modifier = Modifier.weight(1.3f).height(46.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = HUDColors.AmaravatiTeal, contentColor = Color(0xFF02101F))) { 
+                    Text(if (previewPosition == null) "PLACE" else "BUILD", fontWeight = FontWeight.Black, fontSize = 12.sp) 
                 }
-                OutlinedButton(onClick = onBuildInView, enabled = canAfford, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.2.dp, HUDColors.AmaravatiTeal.copy(0.6f))) { 
+                OutlinedButton(onClick = onPreview, enabled = canAfford, modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.2.dp, HUDColors.AmaravatiTeal.copy(0.6f))) { 
                     Icon(Icons.Default.Visibility, null, modifier = Modifier.size(16.dp), tint = HUDColors.AmaravatiTeal)
                     Spacer(Modifier.width(6.dp))
-                    Text("VIEW", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = HUDColors.AmaravatiTeal) 
+                    Text("PREVIEW", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = HUDColors.AmaravatiTeal) 
                 }
             }
         }
@@ -557,8 +663,10 @@ private fun GlassBuildDock(catalog: List<BuildingDefinition>, selected: Building
                         Text(c.displayName.uppercase(), color = if (isSel) Color(0xFF02101F) else Color.White.copy(0.6f), fontSize = 10.sp, fontWeight = FontWeight.Black) 
                     } 
                 }
-                Box(Modifier.size(34.dp).clip(CircleShape).background(HUDColors.AmaravatiGlow).clickable { onQuickRoad() }, contentAlignment = Alignment.Center) { 
-                    Icon(Icons.Default.AddRoad, null, tint = HUDColors.AmaravatiTeal, Modifier.size(18.dp)) 
+                item {
+                    Box(Modifier.size(34.dp).clip(CircleShape).background(HUDColors.AmaravatiGlow).clickable { onQuickRoad() }, contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.AddRoad, null, modifier = Modifier.size(18.dp), tint = HUDColors.AmaravatiTeal)
+                    }
                 }
             }
         }

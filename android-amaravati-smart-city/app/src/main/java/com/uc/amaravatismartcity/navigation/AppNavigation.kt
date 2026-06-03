@@ -12,5 +12,5 @@ sealed interface AppRoute : NavKey {
     data object CityView : AppRoute
     
     @Serializable
-    data object Dashboard : AppRoute
+    data object About : AppRoute
 }

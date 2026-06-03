@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
                             entry<AppRoute.MainMenu> {
                                 MainMenuScreen(
                                     onNewGame = { backStack.add(AppRoute.CityView) },
-                                    onAbout = { backStack.add(AppRoute.Dashboard) }
+                                    onAbout = { backStack.add(AppRoute.About) }
                                 )
                             }
                             entry<AppRoute.CityView> {
@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
                                     onBack = { backStack.removeLastOrNull() }
                                 )
                             }
-                            entry<AppRoute.Dashboard> {
+                            entry<AppRoute.About> {
                                 AboutScreen(
                                     onStartGame = {
                                         backStack.add(AppRoute.CityView)

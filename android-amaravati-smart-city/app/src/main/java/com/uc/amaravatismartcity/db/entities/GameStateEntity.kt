@@ -16,5 +16,9 @@ data class GameStateEntity(
     val sustainabilityScore: Int,
     val cityName: String,
     val rank: String,
-    val dayTime: Float
+    val dayTime: Float,
+    val trafficDensity: Int = 35,
+    val totalBuildings: Int = 0,
+    val activeGoal: String = "",
+    val currentNews: String = ""
 )
