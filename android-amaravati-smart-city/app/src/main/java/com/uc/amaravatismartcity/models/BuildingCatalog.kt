@@ -19,7 +19,10 @@ object BuildingCatalog {
                 assetPath = pick("house", "home", "apartment", "residential", "flat"),
                 cost = 1500,
                 populationImpact = 20,
-                happinessImpact = 2
+                happinessImpact = 2,
+                powerImpact = -5,
+                waterImpact = -4,
+                wasteImpact = 3
             ),
             BuildingDefinition(
                 id = "commercial-it-park",
@@ -28,7 +31,10 @@ object BuildingCatalog {
                 assetPath = pick("office", "commercial", "mall", "business", "it"),
                 cost = 4000,
                 populationImpact = 10,
-                happinessImpact = 1
+                happinessImpact = 1,
+                powerImpact = -12,
+                waterImpact = -8,
+                wasteImpact = 6
             ),
             BuildingDefinition(
                 id = "government-node",
@@ -37,7 +43,10 @@ object BuildingCatalog {
                 assetPath = pick("gov", "government", "secretariat", "assembly", "public"),
                 cost = 5000,
                 happinessImpact = 3,
-                sustainabilityImpact = 1
+                sustainabilityImpact = 1,
+                powerImpact = -15,
+                waterImpact = -10,
+                wasteImpact = 4
             ),
             BuildingDefinition(
                 id = "emergency-hospital",
@@ -46,7 +55,10 @@ object BuildingCatalog {
                 assetPath = pick("ambulance", "hospital", "medical"),
                 cost = 3500,
                 happinessImpact = 8,
-                sustainabilityImpact = 2
+                sustainabilityImpact = 2,
+                powerImpact = -20,
+                waterImpact = -15,
+                wasteImpact = 8
             ),
             BuildingDefinition(
                 id = "education-school",
@@ -56,7 +68,10 @@ object BuildingCatalog {
                 cost = 2800,
                 populationImpact = 5,
                 happinessImpact = 6,
-                sustainabilityImpact = 3
+                sustainabilityImpact = 3,
+                powerImpact = -8,
+                waterImpact = -6,
+                wasteImpact = 4
             ),
             BuildingDefinition(
                 id = "infrastructure-road",
@@ -64,7 +79,8 @@ object BuildingCatalog {
                 title = "Road Segment",
                 assetPath = pick("road-straight", "road-square", "road-bend", "tile-low", "bridge"),
                 cost = 850,
-                sustainabilityImpact = 2
+                sustainabilityImpact = 2,
+                powerImpact = -1
             ),
             BuildingDefinition(
                 id = "green-park",
@@ -73,7 +89,8 @@ object BuildingCatalog {
                 assetPath = pick("tree", "park", "garden", "green"),
                 cost = 700,
                 happinessImpact = 5,
-                sustainabilityImpact = 6
+                sustainabilityImpact = 6,
+                waterImpact = -2
             ),
             BuildingDefinition(
                 id = "riverfront-plaza",
@@ -82,7 +99,8 @@ object BuildingCatalog {
                 assetPath = pick("river", "waterfront", "ghat", "promenade", "embankment"),
                 cost = 2500,
                 happinessImpact = 4,
-                sustainabilityImpact = 3
+                sustainabilityImpact = 3,
+                waterImpact = -5
             ),
             BuildingDefinition(
                 id = "industrial-factory",
@@ -92,7 +110,10 @@ object BuildingCatalog {
                 cost = 6000,
                 populationImpact = 5,
                 happinessImpact = -2,
-                sustainabilityImpact = -5
+                sustainabilityImpact = -5,
+                powerImpact = -40,
+                waterImpact = -30,
+                wasteImpact = 25
             ),
             BuildingDefinition(
                 id = "transport-metro",
@@ -101,7 +122,8 @@ object BuildingCatalog {
                 assetPath = pick("metro", "train", "tram", "subway"),
                 cost = 8000,
                 happinessImpact = 10,
-                sustainabilityImpact = 8
+                sustainabilityImpact = 8,
+                powerImpact = -50
             ),
             BuildingDefinition(
                 id = "utility-water-pump",
@@ -110,7 +132,28 @@ object BuildingCatalog {
                 assetPath = pick("water", "pump", "tank", "buoy"),
                 cost = 3200,
                 happinessImpact = 2,
-                sustainabilityImpact = 5
+                sustainabilityImpact = 5,
+                waterImpact = 60,
+                powerImpact = -10
+            ),
+            BuildingDefinition(
+                id = "utility-solar-farm",
+                category = BuildingCategory.Utilities,
+                title = "Solar Farm",
+                assetPath = pick("solar", "panel", "energy", "generator"),
+                cost = 4500,
+                sustainabilityImpact = 10,
+                powerImpact = 80
+            ),
+            BuildingDefinition(
+                id = "utility-waste-plant",
+                category = BuildingCategory.Utilities,
+                title = "Waste Management",
+                assetPath = pick("waste", "recycling", "garbage", "trash"),
+                cost = 3800,
+                sustainabilityImpact = 4,
+                wasteImpact = -50,
+                powerImpact = -5
             )
         )
     }

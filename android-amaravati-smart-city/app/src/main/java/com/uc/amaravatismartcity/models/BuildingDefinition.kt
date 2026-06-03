@@ -8,5 +8,8 @@ data class BuildingDefinition(
     val cost: Long,
     val populationImpact: Int = 0,
     val happinessImpact: Int = 0,
-    val sustainabilityImpact: Int = 0
+    val sustainabilityImpact: Int = 0,
+    val powerImpact: Int = 0,      // + production, - consumption
+    val waterImpact: Int = 0,      // + production, - consumption
+    val wasteImpact: Int = 0       // + generation, - collection/management
 )

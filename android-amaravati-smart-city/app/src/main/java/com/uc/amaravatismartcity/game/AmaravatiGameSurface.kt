@@ -34,6 +34,7 @@ import com.uc.amaravatismartcity.models.BuildingCatalog
 import com.uc.amaravatismartcity.models.BuildingCategory
 import com.uc.amaravatismartcity.models.BuildingDefinition
 import com.uc.amaravatismartcity.models.GlbAssetIndex
+import com.uc.amaravatismartcity.models.PlacedItem
 import io.github.sceneview.SceneView
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.ModelNode
@@ -46,14 +47,6 @@ import kotlin.math.sin
 
 // BorderStroke is in foundation
 import androidx.compose.foundation.BorderStroke
-
-private data class PlacedItem(
-    val id: Long,
-    val definition: BuildingDefinition,
-    val position: Position,
-    val rotationY: Float = 0f,
-    val scale: Float = 1f
-)
 
 private data class AnimatedVehicle(
     val id: Long,
@@ -182,9 +175,7 @@ fun AmaravatiGameSurface(
     val activeGoal by viewModel.activeGoal.collectAsStateWithLifecycle()
     val isPaused by viewModel.isPaused.collectAsStateWithLifecycle()
     val simSpeed by viewModel.simSpeed.collectAsStateWithLifecycle()
-
-    // Realistic city items (buildings + props + roads)
-    val placedItems = remember { mutableStateListOf<PlacedItem>() }
+    val placedItems by viewModel.placedItems.collectAsStateWithLifecycle()
 
     // Animated live traffic - realistic moving cars on roads
     val vehicles = remember { mutableStateListOf<AnimatedVehicle>() }
@@ -233,12 +224,12 @@ fun AmaravatiGameSurface(
                     val isRoadRow = z == 1 || z == -1
                     val asset = if (isRoadRow && roadStraight.isNotBlank()) roadStraight else if ((x + z) % 2 == 0) tLow else tHigh
                     if (asset.isNotBlank()) {
-                        placedItems += PlacedItem(
+                        viewModel.addPlacedItem(PlacedItem(
                             id = id++,
                             definition = BuildingDefinition("tile-$id", BuildingCategory.Infrastructure, "Pavement", asset, 0),
                             position = Position(x * 3.8f, -0.02f, z * 3.6f),
                             scale = 1.05f
-                        )
+                        ))
                     }
                 }
             }
@@ -247,15 +238,16 @@ fun AmaravatiGameSurface(
             if (roadStraight.isNotBlank()) {
                 listOf(-2, 0, 2).forEach { x ->
                     val roadPos = Position(x * 3.8f + 0.2f, 0.01f, 0.8f)
-                    placedItems += PlacedItem(
-                        id = id++,
-                        definition = BuildingDefinition("road-$id", BuildingCategory.Infrastructure, "Main Road", roadStraight, 900),
+                    val rId = id++
+                    viewModel.addPlacedItem(PlacedItem(
+                        id = rId,
+                        definition = BuildingDefinition("road-$rId", BuildingCategory.Infrastructure, "Main Road", roadStraight, 900),
                         position = roadPos,
                         rotationY = 90f,
                         scale = 0.98f
-                    )
+                    ))
                     // Register for traffic following (makes initial roads "real" too)
-                    roadSegments += RoadSegment(id = id, position = roadPos, rotationY = 90f)
+                    roadSegments += RoadSegment(id = rId, position = roadPos, rotationY = 90f)
                 }
             }
 
@@ -268,24 +260,24 @@ fun AmaravatiGameSurface(
             )
             starters.forEachIndexed { i, def ->
                 val pos = startOffsets.getOrNull(i) ?: Position((i-3)*2.8f, 0f, -7f - i*0.6f)
-                placedItems += PlacedItem(
+                viewModel.addPlacedItem(PlacedItem(
                     id = id++,
                     definition = def,
                     position = pos,
                     scale = if (def.category == BuildingCategory.GreenSpace) 0.95f else 1.15f,
                     rotationY = if (i % 2 == 0) 12f else -8f
-                )
+                ))
             }
 
             // Decorative characters (pedestrians) for life
             characterAssets.take(4).forEachIndexed { i, path ->
-                placedItems += PlacedItem(
+                viewModel.addPlacedItem(PlacedItem(
                     id = id++,
                     definition = BuildingDefinition("citizen-$i", BuildingCategory.GreenSpace, "Citizen", path, 0),
                     position = Position(-4.5f + i * 2.8f, 0.05f, -1.6f + (i % 2) * 0.8f),
                     scale = 0.7f,
                     rotationY = (i * 37f) % 360f
-                )
+                ))
             }
 
             // Moving pedestrians - pure native path animation on sidewalks parallel to roads
@@ -329,7 +321,7 @@ fun AmaravatiGameSurface(
             val dt = ((now - last) / 1000f).coerceIn(0.03f, 0.28f)
             last = now
 
-            viewModel.advanceSimulation(dt, placedItems.size)
+            viewModel.advanceSimulation(dt)
 
             // Update vehicle animation (realistic traffic)
             // Pure native logic: occasionally "choose" a player road to follow for a while (makes the city feel alive and player-built roads meaningful).
@@ -367,6 +359,8 @@ fun AmaravatiGameSurface(
             val s = viewModel.gameState.value
             if (s.happiness > 88) viewModel.updateNews("Citizens celebrating record quality of life in Amaravati.")
             else if (s.trafficDensity > 78) viewModel.updateNews("Traffic advisory: Consider adding more road infrastructure.")
+            else if (s.power < 50) viewModel.updateNews("Power shortage reported! Consider building more Solar Farms.")
+            else if (s.waste > 60) viewModel.updateNews("Waste accumulation reaching critical levels. More management needed.")
         }
     }
 
@@ -391,7 +385,7 @@ fun AmaravatiGameSurface(
 
                 val rawPos = Position(px, 0f, pz)
                 val placePos = if (building.category == BuildingCategory.Infrastructure) rawPos else snapPlacement(rawPos)
-                placedItems += PlacedItem(
+                viewModel.addPlacedItem(PlacedItem(
                     id = now,
                     definition = building,
                     position = placePos,
@@ -401,12 +395,11 @@ fun AmaravatiGameSurface(
                         BuildingCategory.Infrastructure -> 0.96f
                         else -> 1.08f + (count % 3) * 0.03f
                     }
-                )
+                ))
                 viewModel.updateMoney(-building.cost)
                 viewModel.updatePopulation(building.populationImpact)
                 viewModel.updateHappiness(building.happinessImpact)
                 viewModel.updateSustainability(building.sustainabilityImpact)
-                viewModel.updateTotalBuildings(placedItems.count { it.definition.cost > 50 })
 
                 // Roads reduce traffic pressure + register actual driveable segment
                 if (building.category == BuildingCategory.Infrastructure) {
@@ -417,13 +410,6 @@ fun AmaravatiGameSurface(
                         rotationY = ((count * 23) % 27 - 13).toFloat()
                     )
                 }
-                if (building.category == BuildingCategory.Industrial) {
-                    viewModel.updatePollution(4)
-                }
-                if (building.title.contains("Metro", true) || building.title.contains("Transport", true)) {
-                    viewModel.updateHappiness(4)
-                    viewModel.updateTraffic(-6)
-                }
             }
         }
     }
@@ -431,12 +417,11 @@ fun AmaravatiGameSurface(
     val onDemolishLast: () -> Unit = {
         val removable = placedItems.lastOrNull { it.definition.cost > 10 }
         if (removable != null) {
-            placedItems.remove(removable)
+            viewModel.removePlacedItem(removable)
             // Also remove corresponding road segment so traffic no longer follows a deleted road
             roadSegments.removeAll { it.id == removable.id }
             // Refund partial
             viewModel.updateMoney((removable.definition.cost * 0.45).toLong())
-            viewModel.updateTotalBuildings(placedItems.count { it.definition.cost > 50 })
         }
     }
 
@@ -444,29 +429,29 @@ fun AmaravatiGameSurface(
     val onBuildInView: () -> Unit = {
         selectedBuilding?.let { b ->
             if (gameState.money >= b.cost && b.assetPath.isNotBlank()) {
+                val now = System.currentTimeMillis()
                 // Place in a nice forward arc from "city center"
                 val idx = placedItems.size
                 val spread = (idx % 5 - 2) * 1.6f
                 val forward = -9.5f - (idx / 4) * 1.3f
                 val rawPos = Position(spread * 0.9f, 0.02f, forward)
                 val placePos = if (b.category == BuildingCategory.Infrastructure) rawPos else snapPlacement(rawPos)
-                placedItems += PlacedItem(
-                    id = System.currentTimeMillis(),
+                viewModel.addPlacedItem(PlacedItem(
+                    id = now,
                     definition = b,
                     position = placePos,
                     scale = 1.05f,
                     rotationY = spread * 1.6f
-                )
+                ))
                 viewModel.updateMoney(-b.cost)
                 viewModel.updatePopulation(b.populationImpact)
                 viewModel.updateHappiness(b.happinessImpact)
                 viewModel.updateSustainability(b.sustainabilityImpact)
-                viewModel.updateTotalBuildings(placedItems.count { it.definition.cost > 50 })
 
                 // Register road if this was infrastructure so traffic starts using it
                 if (b.category == BuildingCategory.Infrastructure) {
                     roadSegments += RoadSegment(
-                        id = System.currentTimeMillis(),
+                        id = now,
                         position = Position(placePos.x, 0.01f, placePos.z),
                         rotationY = spread * 1.6f
                     )
@@ -857,6 +842,12 @@ private fun GameTopBarRealistic(
                     value = "${gameState.happiness}",
                     tint = if (gameState.happiness > 72) Color(0xFF58DBB8) else if (gameState.happiness > 48) Color(0xFFFFB74D) else Color(0xFFFF5252)
                 )
+                
+                // Resources
+                StatPill(icon = Icons.Default.FlashOn, value = "${gameState.power}%", tint = if (gameState.power > 70) Color(0xFFFFD54F) else Color(0xFFFF7043))
+                StatPill(icon = Icons.Default.WaterDrop, value = "${gameState.water}%", tint = if (gameState.water > 70) Color(0xFF4FC3F7) else Color(0xFFFF7043))
+                StatPill(icon = Icons.Default.DeleteOutline, value = "${gameState.waste}%", tint = if (gameState.waste < 40) Color(0xFF81C784) else Color(0xFFFF7043))
+
                 StatPill(
                     icon = if (isNight) Icons.Default.Nightlight else Icons.Default.WbSunny,
                     value = String.format("%.1f", gameState.dayTime),
@@ -1001,7 +992,9 @@ private fun BuildingInspectorRealistic(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ImpactBadge(Icons.Default.People, building.populationImpact, if (building.populationImpact >= 0) Color(0xFF81D4FA) else Color(0xFFFFAB91))
                 ImpactBadge(Icons.Default.SentimentSatisfied, building.happinessImpact, if (building.happinessImpact >= 0) Color(0xFF58DBB8) else Color(0xFFFF8A65))
-                ImpactBadge(Icons.Default.Park, building.sustainabilityImpact, if (building.sustainabilityImpact >= 0) Color(0xFF81C784) else Color(0xFFE57373))
+                ImpactBadge(Icons.Default.FlashOn, building.powerImpact, if (building.powerImpact >= 0) Color(0xFFFFD54F) else Color(0xFFFF7043))
+                ImpactBadge(Icons.Default.WaterDrop, building.waterImpact, if (building.waterImpact >= 0) Color(0xFF4FC3F7) else Color(0xFFFF7043))
+                ImpactBadge(Icons.Default.DeleteOutline, -building.wasteImpact, if (building.wasteImpact <= 0) Color(0xFF81C784) else Color(0xFFFF7043))
             }
 
             Spacer(Modifier.height(9.dp))

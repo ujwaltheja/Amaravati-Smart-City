@@ -9,6 +9,7 @@ data class GameState(
     val happiness: Int = 72,
     val water: Int = 95,
     val power: Int = 88,
+    val waste: Int = 12, // 0-100 percentage of waste accumulation
     val pollution: Int = 14,
     val sustainabilityScore: Int = 58,
     val cityName: String = "Amaravati",

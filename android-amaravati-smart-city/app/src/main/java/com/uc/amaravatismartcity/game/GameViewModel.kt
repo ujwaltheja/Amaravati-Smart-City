@@ -1,10 +1,8 @@
 package com.uc.amaravatismartcity.game
 
 import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import com.uc.amaravatismartcity.models.PlacedItem
+import kotlinx.coroutines.flow.*
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -12,6 +10,9 @@ import kotlin.random.Random
 class GameViewModel : ViewModel() {
     private val _gameState = MutableStateFlow(GameState())
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
+
+    private val _placedItems = MutableStateFlow<List<PlacedItem>>(emptyList())
+    val placedItems: StateFlow<List<PlacedItem>> = _placedItems.asStateFlow()
 
     private val _currentNews = MutableStateFlow("Welcome to Amaravati. The Krishna riverfront awaits your vision.")
     val currentNews: StateFlow<String> = _currentNews.asStateFlow()
@@ -128,11 +129,30 @@ class GameViewModel : ViewModel() {
     }
 
     fun updatePower(delta: Int) {
-        _gameState.update { it.copy(power = (it.power + delta).coerceIn(20, 100)) }
+        _gameState.update { it.copy(power = (it.power + delta).coerceIn(0, 100)) }
+    }
+
+    fun updateWaste(delta: Int) {
+        _gameState.update { it.copy(waste = (it.waste + delta).coerceIn(0, 100)) }
     }
 
     fun updatePollution(delta: Int) {
         _gameState.update { it.copy(pollution = (it.pollution + delta).coerceIn(0, 100)) }
+    }
+
+    fun addPlacedItem(item: PlacedItem) {
+        _placedItems.update { it + item }
+        updateTotalBuildings(_placedItems.value.size)
+    }
+
+    fun removePlacedItem(item: PlacedItem) {
+        _placedItems.update { list -> list.filter { it.id != item.id } }
+        updateTotalBuildings(_placedItems.value.size)
+    }
+
+    fun removeLastPlacedItem() {
+        _placedItems.update { if (it.isNotEmpty()) it.dropLast(1) else it }
+        updateTotalBuildings(_placedItems.value.size)
     }
 
     fun updateSustainability(delta: Int) {
@@ -175,7 +195,7 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    fun advanceSimulation(deltaSeconds: Float, placedCount: Int) {
+    fun advanceSimulation(deltaSeconds: Float) {
         val paused = _isPaused.value
         if (paused) return
 
@@ -183,6 +203,8 @@ class GameViewModel : ViewModel() {
         val effDelta = deltaSeconds * speed
 
         val current = _gameState.value
+        val items = _placedItems.value
+        val placedCount = items.size
 
         // Day/night progression ~ 1 real sec = ~6 game minutes (tweakable)
         updateDayTime(effDelta * 0.1f)
@@ -198,46 +220,70 @@ class GameViewModel : ViewModel() {
             }
         }
 
+        // --- REALISTIC RESOURCE SIMULATION ---
+        // Sum up impacts from all buildings
+        var netPower = 0
+        var netWater = 0
+        var netWaste = 0
+        items.forEach {
+            netPower += it.definition.powerImpact
+            netWater += it.definition.waterImpact
+            netWaste += it.definition.wasteImpact
+        }
+
+        // Power & Water levels drift based on net balance
+        // If net is positive (production > consumption), level rises to 100.
+        // If net is negative, level falls.
+        val powerDrift = if (netPower >= 0) (if (current.power < 100) 1 else 0) else -1
+        val waterDrift = if (netWater >= 0) (if (current.water < 100) 1 else 0) else -1
+
+        // Waste accumulation: if netWaste is positive, waste level rises.
+        // Waste management buildings (negative wasteImpact) reduce the accumulation.
+        val wasteDrift = if (netWaste > 0) 1 else if (netWaste < 0 && current.waste > 0) -1 else 0
+
+        if (Random.nextFloat() < 0.3f * effDelta) {
+            if (powerDrift != 0) updatePower(powerDrift)
+            if (waterDrift != 0) updateWater(waterDrift)
+            if (wasteDrift != 0) updateWaste(wasteDrift)
+        }
+
         // Traffic simulation
         val targetTraffic = (28 + placedCount * 3 + if (current.pollution > 55) 18 else 0).coerceAtMost(92)
         val trafficDrift = ((targetTraffic - current.trafficDensity) * 0.018f * effDelta).toInt()
         if (trafficDrift != 0) updateTraffic(trafficDrift)
 
-        // Pollution drift
+        // Pollution drift: influenced by industrial buildings and waste
         val pollutionDrift = when {
-            placedCount > 14 && current.pollution < 72 -> 1
-            current.trafficDensity > 72 -> 1
-            current.pollution > 48 && Random.nextFloat() < 0.3f -> -1
+            items.any { it.definition.id.contains("factory") } && current.pollution < 85 -> 1
+            current.waste > 60 -> 1
+            current.trafficDensity > 75 -> 1
+            current.pollution > 20 && Random.nextFloat() < 0.2f -> -1
             else -> 0
         }
         if (pollutionDrift != 0) updatePollution(pollutionDrift)
 
-        // Happiness dynamics
+        // Happiness dynamics: negative if services are failing
         val happyDrift = when {
+            current.power < 40 -> -2
+            current.water < 40 -> -2
+            current.waste > 70 -> -1
             current.pollution > 65 -> -1
             current.trafficDensity > 78 -> -1
-            current.happiness < 55 && current.water > 70 && current.power > 70 -> 1
-            current.dayTime in 7f..19f && Random.nextFloat() < 0.25f -> 1
+            current.happiness < 55 && current.water > 80 && current.power > 80 -> 1
+            current.dayTime in 7f..19f && Random.nextFloat() < 0.2f -> 1
             else -> 0
         }
         if (happyDrift != 0) updateHappiness(happyDrift)
 
         // Population growth / decline
-        if (current.happiness > 78 && current.population < 5500 && Random.nextFloat() < 0.6f) {
-            updatePopulation(1 + (placedCount / 9))
-        } else if (current.happiness < 38 && Random.nextFloat() < 0.4f) {
+        if (current.happiness > 75 && current.power > 70 && current.water > 70 && current.population < 8000 && Random.nextFloat() < 0.5f) {
+            updatePopulation(1 + (placedCount / 8))
+        } else if ((current.happiness < 35 || current.power < 20 || current.water < 20) && Random.nextFloat() < 0.3f) {
             updatePopulation(-1)
         }
 
-        // Resource balance
-        val utilDelta = if (placedCount > 9) 0 else if (current.population > 900) -1 else 0
-        if (utilDelta != 0) {
-            updateWater(utilDelta)
-            updatePower(utilDelta)
-        }
-
         recalculateSmartScore()
-        checkGoals(current.copy(population = current.population)) // pass copy to avoid instant loop
+        checkGoals(current.copy(population = current.population))
 
         // Occasional random event
         if (Random.nextFloat() < 0.012f * effDelta) {
