@@ -47,7 +47,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         "Riverfront festival boosted tourism income.",
         "Industrial spill risk: Pollution rising.",
         "Citizens praise new green corridor.",
-        "School exam results high — education impact +3."
+        "School exam results high — education impact +3.",
+        "🔥 FIRE BREAKOUT in Sector 1! Emergency services needed.",
+        "🚑 Medical emergency reported in Residential Block B."
     )
 
     init {
@@ -307,7 +309,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Passive income based on population + buildings
         val incomePerSec = (current.population * 0.9 + placedCount * 28 + current.happiness * 1.8).toLong()
         if (effDelta > 0) {
-            // accumulate fractional then grant
             val income = (incomePerSec * effDelta).toLong().coerceAtLeast(1)
             if (System.currentTimeMillis() - current.lastIncomeTick > 650) {
                 addIncome(income, if (placedCount > 6) "Economy thriving" else "Daily commerce")
@@ -315,25 +316,40 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // --- REALISTIC RESOURCE SIMULATION ---
-        // Sum up impacts from all buildings
-        var netPower = 0
-        var netWater = 0
-        var netWaste = 0
-        items.forEach {
-            netPower += it.definition.powerImpact
-            netWater += it.definition.waterImpact
-            netWaste += it.definition.wasteImpact
+        // --- OPTION 2: SMART GRID CONNECTIVITY (Radius-based) ---
+        // Consumers only function if they are within radius of a producer
+        val producers = items.filter { it.definition.powerImpact > 0 || it.definition.waterImpact > 0 }
+        val consumers = items.filter { it.definition.powerImpact < 0 || it.definition.waterImpact < 0 }
+        
+        var connectedPowerCons = 0
+        var connectedWaterCons = 0
+        var totalPowerCons = consumers.sumOf { it.definition.powerImpact.coerceAtMost(0) }
+        var totalWaterCons = consumers.sumOf { it.definition.waterImpact.coerceAtMost(0) }
+
+        consumers.forEach { consumer ->
+            val isPowered = producers.any { p -> 
+                p.definition.powerImpact > 0 && 
+                distSq(p.position, consumer.position) < 144f // 12 units radius
+            }
+            val hasWater = producers.any { p -> 
+                p.definition.waterImpact > 0 && 
+                distSq(p.position, consumer.position) < 144f
+            }
+            
+            if (isPowered) connectedPowerCons += consumer.definition.powerImpact
+            if (hasWater) connectedWaterCons += consumer.definition.waterImpact
         }
 
-        // Power & Water levels drift based on net balance
-        // If net is positive (production > consumption), level rises to 100.
-        // If net is negative, level falls.
-        val powerDrift = if (netPower >= 0) (if (current.power < 100) 1 else 0) else -1
-        val waterDrift = if (netWater >= 0) (if (current.water < 100) 1 else 0) else -1
+        val gridEff = if (totalPowerCons < 0) connectedPowerCons.toFloat() / totalPowerCons else 1f
+        val waterEff = if (totalWaterCons < 0) connectedWaterCons.toFloat() / totalWaterCons else 1f
 
-        // Waste accumulation: if netWaste is positive, waste level rises.
-        // Waste management buildings (negative wasteImpact) reduce the accumulation.
+        // Global balance for drift
+        var netPower = items.sumOf { it.definition.powerImpact }
+        var netWater = items.sumOf { it.definition.waterImpact }
+        var netWaste = items.sumOf { it.definition.wasteImpact }
+
+        val powerDrift = if (netPower >= 0 && gridEff > 0.75f) (if (current.power < 100) 1 else 0) else -1
+        val waterDrift = if (netWater >= 0 && waterEff > 0.75f) (if (current.water < 100) 1 else 0) else -1
         val wasteDrift = if (netWaste > 0) 1 else if (netWaste < 0 && current.waste > 0) -1 else 0
 
         if (Random.nextFloat() < 0.3f * effDelta) {
@@ -342,12 +358,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (wasteDrift != 0) updateWaste(wasteDrift)
         }
 
-        // Traffic simulation
+        // --- OPTION 1: DISASTERS ---
+        if (currentNews.value.contains("FIRE") || currentNews.value.contains("Medical emergency")) {
+            val hasCoverage = when {
+                currentNews.value.contains("FIRE") -> items.any { it.definition.id.contains("police") || it.definition.category == BuildingCategory.Emergency }
+                else -> items.any { it.definition.id.contains("hospital") || it.definition.id.contains("ambulance") }
+            }
+            if (!hasCoverage && Random.nextFloat() < 0.1f * effDelta) {
+                updateHappiness(-1)
+                updateMoney(-150)
+            }
+        }
+
+        // Traffic & Pollution
         val targetTraffic = (28 + placedCount * 3 + if (current.pollution > 55) 18 else 0).coerceAtMost(92)
         val trafficDrift = ((targetTraffic - current.trafficDensity) * 0.018f * effDelta).toInt()
         if (trafficDrift != 0) updateTraffic(trafficDrift)
 
-        // Pollution drift: influenced by industrial buildings and waste
         val pollutionDrift = when {
             items.any { it.definition.id.contains("factory") } && current.pollution < 85 -> 1
             current.waste > 60 -> 1
@@ -357,20 +384,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (pollutionDrift != 0) updatePollution(pollutionDrift)
 
-        // Happiness dynamics: negative if services are failing
+        // Happiness dynamics
         val happyDrift = when {
             current.power < 40 -> -2
             current.water < 40 -> -2
             current.waste > 70 -> -1
             current.pollution > 65 -> -1
             current.trafficDensity > 78 -> -1
+            gridEff < 0.65f -> -1
             current.happiness < 55 && current.water > 80 && current.power > 80 -> 1
             current.dayTime in 7f..19f && Random.nextFloat() < 0.2f -> 1
             else -> 0
         }
         if (happyDrift != 0) updateHappiness(happyDrift)
 
-        // Population growth / decline
+        // Population growth
         if (current.happiness > 75 && current.power > 70 && current.water > 70 && current.population < 8000 && Random.nextFloat() < 0.5f) {
             updatePopulation(1 + (placedCount / 8))
         } else if ((current.happiness < 35 || current.power < 20 || current.water < 20) && Random.nextFloat() < 0.3f) {
@@ -380,9 +408,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         recalculateSmartScore()
         checkGoals(current.copy(population = current.population))
 
-        // Occasional random event
         if (Random.nextFloat() < 0.012f * effDelta) {
             triggerRandomEvent()
         }
+    }
+
+    private fun distSq(p1: Position, p2: Position): Float {
+        val dx = p1.x - p2.x
+        val dz = p1.z - p2.z
+        return dx * dx + dz * dz
     }
 }

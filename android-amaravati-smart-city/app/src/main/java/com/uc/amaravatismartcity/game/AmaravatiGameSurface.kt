@@ -38,9 +38,10 @@ import com.uc.amaravatismartcity.models.PlacedItem
 import io.github.sceneview.SceneView
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.LightNode
+import io.github.sceneview.node.ModelNode
 import com.google.android.filament.LightManager
-import io.github.sceneview.math.Float3
-import io.github.sceneview.math.Float4
+import dev.romainguy.kotlin.math.Float3
+import dev.romainguy.kotlin.math.Float4
 import io.github.sceneview.rememberCameraManipulator
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelLoader
@@ -475,7 +476,10 @@ fun AmaravatiGameSurface(
         }
     }
 
-    // Background gradient reacts to day/night (3D lights below also use the same day/isNight)
+    var isPhotoMode by remember { mutableStateOf(false) }
+    var isSnapshotFlashing by remember { mutableStateOf(false) }
+
+    // ... existing background color logic ...
     val bgTop = when {
         isNight -> Color(0xFF01060F)
         dawnDusk -> Color(0xFF1F2A3D)
@@ -521,7 +525,6 @@ fun AmaravatiGameSurface(
             val dz = cos(Math.toRadians(sunAngle.toDouble())).toFloat() * 0.3f
             
             LightNode(
-                engine = engine,
                 type = LightManager.Type.DIRECTIONAL,
                 intensity = if (isNight) 2800f else 42000f,
                 color = if (isNight) Float4(0.6f, 0.7f, 1f, 1f) else Float4(1f, 0.95f, 0.85f, 1f),
@@ -532,7 +535,6 @@ fun AmaravatiGameSurface(
             if (isNight) {
                 roadSegments.take(8).forEach { seg ->
                     LightNode(
-                        engine = engine,
                         type = LightManager.Type.POINT,
                         intensity = 18000f,
                         color = Float4(1f, 0.92f, 0.75f, 1f),
@@ -672,80 +674,125 @@ fun AmaravatiGameSurface(
                 }
             }
             Surface(
-                onClick = { isBulldozeMode = !isBulldozeMode; if (isBulldozeMode && placedItems.isNotEmpty()) onDemolishLast() },
+                onClick = { isPhotoMode = !isPhotoMode },
                 shape = RoundedCornerShape(10.dp),
-                color = if (isBulldozeMode) Color(0xFFFF4B4B).copy(0.9f) else Color.Black.copy(0.55f),
-                border = if (isBulldozeMode) BorderStroke(1.5.dp, Color.White.copy(0.5f)) else null,
+                color = if (isPhotoMode) Color(0xFF58DBB8) else Color.Black.copy(alpha = 0.55f),
                 modifier = Modifier.size(46.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Delete, null, tint = Color.White, modifier = Modifier.size(21.dp))
+                    Icon(Icons.Default.CameraAlt, null, tint = if (isPhotoMode) Color.Black else Color.White, modifier = Modifier.size(22.dp))
                 }
             }
-            Surface(
-                onClick = { viewModel.triggerRandomEvent() },
-                shape = RoundedCornerShape(10.dp),
-                color = Color.Black.copy(alpha = 0.45f),
-                modifier = Modifier.size(42.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF58DBB8).copy(0.9f), modifier = Modifier.size(19.dp))
+            if (!isPhotoMode) {
+                Surface(
+                    onClick = { isBulldozeMode = !isBulldozeMode; if (isBulldozeMode && placedItems.isNotEmpty()) onDemolishLast() },
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isBulldozeMode) Color(0xFFFF4B4B).copy(0.9f) else Color.Black.copy(0.55f),
+                    border = if (isBulldozeMode) BorderStroke(1.5.dp, Color.White.copy(0.5f)) else null,
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Delete, null, tint = Color.White, modifier = Modifier.size(21.dp))
+                    }
                 }
-            }
+                Surface(
+                    onClick = { viewModel.triggerRandomEvent() },
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.Black.copy(alpha = 0.45f),
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF58DBB8).copy(0.9f), modifier = Modifier.size(19.dp))
+                    }
+                }
 
-            // Pure native persistence buttons (using Room database)
-            Surface(
-                onClick = { viewModel.saveGame() },
-                shape = RoundedCornerShape(10.dp),
-                color = Color(0xFF4CAF50).copy(alpha = 0.7f),
-                modifier = Modifier.size(42.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                // Pure native persistence buttons (using Room database)
+                Surface(
+                    onClick = { viewModel.saveGame() },
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF4CAF50).copy(alpha = 0.7f),
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
                 }
-            }
-            Surface(
-                onClick = { viewModel.loadGame() },
-                shape = RoundedCornerShape(10.dp),
-                color = Color(0xFF2196F3).copy(alpha = 0.7f),
-                modifier = Modifier.size(42.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Restore, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Surface(
+                    onClick = { viewModel.loadGame() },
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF2196F3).copy(alpha = 0.7f),
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Restore, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }
 
-        // Bottom build + controls
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 8.dp, start = 8.dp, end = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Inspector for selected
-            selectedBuilding?.let { building ->
-                BuildingInspectorRealistic(
-                    building = building,
-                    canAfford = gameState.money >= building.cost,
-                    onBuild = { onBuild(building) },
-                    onBuildInView = onBuildInView
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-
-            GameBuildBarRealistic(
-                buildingCatalog = buildingCatalog,
-                selectedBuilding = selectedBuilding,
-                onSelectedBuilding = { selectedBuilding = it },
-                onBuild = onBuild,
-                onQuickRoad = {
-                    val road = buildingCatalog.firstOrNull { it.category == BuildingCategory.Infrastructure }
-                        ?: buildingCatalog.firstOrNull()
-                    road?.let { onBuild(it) }
+        if (isPhotoMode) {
+            // Photo mode overlay
+            Box(Modifier.fillMaxSize()) {
+                IconButton(
+                    onClick = { 
+                        isSnapshotFlashing = true
+                        viewModel.updateNews("Snapshot saved to city archives.")
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp).size(72.dp).background(Color.White.copy(0.2f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Camera, null, tint = Color.White, modifier = Modifier.size(42.dp))
                 }
-            )
+                Text(
+                    "PHOTO MODE",
+                    color = Color.White.copy(0.5f),
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 20.dp),
+                    letterSpacing = 4.sp
+                )
+            }
+        }
+
+        // Snapshot Flash Effect
+        if (isSnapshotFlashing) {
+            Box(Modifier.fillMaxSize().background(Color.White))
+            LaunchedEffect(Unit) {
+                delay(80)
+                isSnapshotFlashing = false
+            }
+        }
+
+        // Bottom build + controls
+        if (!isPhotoMode) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp, start = 8.dp, end = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Inspector for selected
+                selectedBuilding?.let { building ->
+                    BuildingInspectorRealistic(
+                        building = building,
+                        canAfford = gameState.money >= building.cost,
+                        onBuild = { onBuild(building) },
+                        onBuildInView = onBuildInView
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                GameBuildBarRealistic(
+                    buildingCatalog = buildingCatalog,
+                    selectedBuilding = selectedBuilding,
+                    onSelectedBuilding = { selectedBuilding = it },
+                    onBuild = onBuild,
+                    onQuickRoad = {
+                        val road = buildingCatalog.firstOrNull { it.category == BuildingCategory.Infrastructure }
+                            ?: buildingCatalog.firstOrNull()
+                        road?.let { onBuild(it) }
+                    }
+                )
+            }
         }
 
         // Subtle time indicator (realism)
