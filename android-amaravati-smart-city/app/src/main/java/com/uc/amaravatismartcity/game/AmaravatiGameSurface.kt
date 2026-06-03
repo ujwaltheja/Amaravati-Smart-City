@@ -643,8 +643,10 @@ private fun GlassBuildDock(catalog: List<BuildingDefinition>, selected: Building
                         Text(c.displayName.uppercase(), color = if (selCat == c) Color(0xFF02101F) else Color.White.copy(0.6f), fontSize = 9.sp, fontWeight = FontWeight.Black) 
                     } 
                 }
-                Box(Modifier.size(30.dp).clip(CircleShape).background(HUDColors.AmaravatiGlow).clickable { onQuickRoad() }, contentAlignment = Alignment.Center) { 
-                    Icon(Icons.Default.AddRoad, null, modifier = Modifier.size(16.dp), tint = HUDColors.AmaravatiTeal)
+                item {
+                    Box(Modifier.size(30.dp).clip(CircleShape).background(HUDColors.AmaravatiGlow).clickable { onQuickRoad() }, contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.AddRoad, null, modifier = Modifier.size(16.dp), tint = HUDColors.AmaravatiTeal)
+                    }
                 }
             }
         }
