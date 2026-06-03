@@ -320,12 +320,12 @@ fun AmaravatiGameSurface(
             )
             
             if (isNight) {
-                roadSegments.take(12).forEach { seg -> 
+                for (seg in roadSegments.take(12)) {
                     LightNode(type = LightManager.Type.POINT, intensity = 25000f, color = Float4(1f, 0.85f, 0.6f, 1f), position = Position(seg.position.x, 4.5f, seg.position.z)) 
                 }
             }
 
-            placedItems.forEach { item ->
+            for (item in placedItems) {
                 key(item.id) {
                     val mi = remember(item.id, item.definition.assetPath) { 
                         try { modelLoader.createModelInstance(item.definition.assetPath) } catch (_: Exception) { null } 
@@ -335,7 +335,7 @@ fun AmaravatiGameSurface(
                     }
                 }
             }
-            vehicles.forEach { v ->
+            for (v in vehicles) {
                 val pos = computeVehiclePosition(v, roadSegments)
                 key(v.id) {
                     val mi = remember(v.id, v.assetPath) { try { modelLoader.createModelInstance(v.assetPath) } catch (_: Exception) { null } }
@@ -344,7 +344,7 @@ fun AmaravatiGameSurface(
             }
         }
 
-        // --- HUD LAYOUT ---
+        // --- TOP HUD SECTION ---
         Column(
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -354,12 +354,14 @@ fun AmaravatiGameSurface(
             GlassNewsTicker(currentNews, isNight)
         }
         
+        // --- GOAL TRACKER ---
         GlassGoalTracker(
             modifier = Modifier.align(Alignment.TopStart).padding(top = 100.dp, start = 16.dp), 
             activeGoal = activeGoal, 
             population = gameState.population
         )
 
+        // --- RADAR MINIMAP ---
         GlassMinimap(
             modifier = Modifier.align(Alignment.TopEnd).padding(top = 100.dp, end = 16.dp).size(110.dp), 
             items = placedItems, 
@@ -368,6 +370,7 @@ fun AmaravatiGameSurface(
             center = Position(0f, 0f, 0f)
         )
         
+        // --- ACTION BUTTONS ---
         Column(
             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), 
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -383,6 +386,7 @@ fun AmaravatiGameSurface(
             }
         }
 
+        // --- PHOTO MODE ---
         if (isPhotoMode) {
             Box(Modifier.fillMaxSize()) {
                 IconButton(onClick = { isSnapshotFlashing = true; viewModel.updateNews("Snapshot saved.") }, Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp).size(80.dp).background(Color.White.copy(0.12f), CircleShape).border(2.5.dp, Color.White, CircleShape)) { Icon(Icons.Default.Camera, null, tint = Color.White, Modifier.size(40.dp)) }
@@ -392,6 +396,7 @@ fun AmaravatiGameSurface(
 
         if (isSnapshotFlashing) { Box(Modifier.fillMaxSize().background(Color.White)); LaunchedEffect(Unit) { delay(80); isSnapshotFlashing = false } }
 
+        // --- BUILDING DOCK ---
         if (!isPhotoMode) {
             Column(
                 modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp), 
@@ -477,7 +482,7 @@ private fun GlassNewsTicker(news: String, isNight: Boolean) {
 
 @Composable
 private fun GlassGoalTracker(modifier: Modifier, activeGoal: String, population: Int) {
-    GlassPanel(modifier.widthIn(max = 190.dp), RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)) {
+    GlassPanel(modifier, RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) { 
                 Icon(Icons.Default.EmojiEvents, null, tint = HUDColors.AmaravatiTeal, Modifier.size(18.dp))
@@ -606,7 +611,7 @@ private fun GlassMinimap(modifier: Modifier, items: List<PlacedItem>, roads: Lis
                 val x = cx + (s.position.x - center.x) * scale
                 val y = cy + (s.position.z - center.z) * scale
                 val r = Math.toRadians(s.rotationY.toDouble())
-                drawLine(HUDColors.AmaravatiTeal.copy(0.5f), Offset(x - cos(r).toFloat() * 6, y - sin(r).toFloat() * 6), Offset(x + cos(r).toFloat() * 6, y + sin(r).toFloat() * 6), 3f) 
+                drawLine(HUDColors.AmaravatiTeal.copy(0.4f), Offset(x - cos(r).toFloat() * 6, y - sin(r).toFloat() * 6), Offset(x + cos(r).toFloat() * 6, y + sin(r).toFloat() * 6), 3f) 
             }
             items.filter { it.definition.cost > 50 }.forEach { i -> 
                 drawCircle(HUDColors.AmaravatiTeal.copy(0.8f), 3.5f, Offset(cx + (i.position.x - center.x) * scale, cy + (i.position.z - center.z) * scale)) 
