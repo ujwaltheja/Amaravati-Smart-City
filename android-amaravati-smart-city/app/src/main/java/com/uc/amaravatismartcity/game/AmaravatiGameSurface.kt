@@ -509,6 +509,19 @@ fun AmaravatiGameSurface(
                     }
                 }
             }
+
+            // Safety Test Model: Force load a known asset if anything is wrong
+            val testAsset = remember(assetPaths) { assetPaths.firstOrNull { it.contains("building-a") } }
+            if (testAsset != null) {
+                val testMi = rememberModelInstance(modelLoader, testAsset)
+                if (testMi != null) {
+                    ModelNode(
+                        modelInstance = testMi,
+                        scaleToUnits = 2.0f,
+                        position = Position(0f, 0f, 0f)
+                    )
+                }
+            }
             
             val maxVehicles = when (gameState.graphicsQuality) { 0 -> 4; 2 -> 18; else -> 10 }
             for (v in vehicles.take(maxVehicles).takeIf { roadSegments.isNotEmpty() }.orEmpty()) {
