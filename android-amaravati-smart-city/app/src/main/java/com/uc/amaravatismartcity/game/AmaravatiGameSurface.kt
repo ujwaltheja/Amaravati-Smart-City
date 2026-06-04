@@ -49,7 +49,6 @@ import io.github.sceneview.node.ModelNode
 import io.github.sceneview.rememberCameraManipulator
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelLoader
-import io.github.sceneview.rememberModelInstance
 import io.github.sceneview.rememberEnvironmentLoader
 import io.github.sceneview.rememberEnvironment
 import kotlinx.coroutines.delay
@@ -537,7 +536,7 @@ fun AmaravatiGameSurface(
                 if (item.definition.cost > 0 && farSq > renderDistanceSq) continue
                 
                 key(item.id) {
-                    val mi = rememberModelInstance(modelLoader, item.definition.assetPath)
+                    val mi = rememberBufferModelInstance(modelLoader, item.definition.assetPath)
                     if (mi != null) {
                         val finalScale = if (item.definition.id.startsWith("tile")) 2.1f else item.scale
                         ModelNode(
@@ -567,44 +566,11 @@ fun AmaravatiGameSurface(
                     }
                 }
             }
-
-            // Safety Test Model: Force load a known asset if anything is wrong
-            val testAsset = remember(assetPaths) { assetPaths.firstOrNull { it.contains("building-a") } }
-            if (testAsset != null) {
-                var testMi by remember { mutableStateOf<com.google.android.filament.gltfio.FilamentInstance?>(null) }
-                LaunchedEffect(testAsset) {
-                    try {
-                        Log.d("Amaravati", "Manual Load Attempt (Buffer Mode): $testAsset")
-                        val bytes = context.assets.open(testAsset).use { it.readBytes() }
-                        val buffer = java.nio.ByteBuffer.wrap(bytes)
-                        testMi = modelLoader.createModelInstance(buffer)
-                        Log.d("Amaravati", "Manual Load Success (Buffer Mode): $testAsset")
-                    } catch (e: Exception) {
-                        Log.e("Amaravati", "Manual Load EXCEPTION (Buffer Mode): $testAsset", e)
-                        // Fallback to default load to see if it gives a different error
-                        try {
-                            Log.d("Amaravati", "Retrying with direct asset loader...")
-                            testMi = modelLoader.createModelInstance(testAsset)
-                            Log.d("Amaravati", "Direct retry Success!")
-                        } catch(e2: Exception) {
-                            Log.e("Amaravati", "Direct retry failed too", e2)
-                        }
-                    }
-                }
-                if (testMi != null) {
-                    ModelNode(
-                        modelInstance = testMi!!,
-                        scaleToUnits = 2.0f,
-                        position = Position(0f, 0f, 0f)
-                    )
-                }
-            }
-            
             val maxVehicles = when (gameState.graphicsQuality) { 0 -> 4; 2 -> 18; else -> 10 }
             for (v in vehicles.take(maxVehicles).takeIf { roadSegments.isNotEmpty() }.orEmpty()) {
                 val pos = computeVehiclePosition(v, roadSegments)
                 key(v.id) {
-                    val mi = rememberModelInstance(modelLoader, v.assetPath)
+                    val mi = rememberBufferModelInstance(modelLoader, v.assetPath)
                     if (mi != null) {
                         ModelNode(
                             modelInstance = mi,
@@ -629,7 +595,7 @@ fun AmaravatiGameSurface(
             ) {
                 val pos = computeAmbientPosition(mover)
                 key(mover.id) {
-                    val mi = rememberModelInstance(modelLoader, mover.assetPath)
+                    val mi = rememberBufferModelInstance(modelLoader, mover.assetPath)
                     if (mi != null) {
                         val heading = if (mover.route == AmbientRoute.River) 90f else 90f
                         ModelNode(
@@ -656,7 +622,7 @@ fun AmaravatiGameSurface(
                 )
                 emergencyAsset?.let { asset ->
                     key("emergency-${gameState.activeEmergency}") {
-                        val mi = rememberModelInstance(modelLoader, asset)
+                        val mi = rememberBufferModelInstance(modelLoader, asset)
                         if (mi != null) {
                             val road = roadSegments.firstOrNull()
                             val pos = road?.position ?: Position(target.x + 2f, 0.12f, target.z)
@@ -674,7 +640,7 @@ fun AmaravatiGameSurface(
             val preview = placementPreview
             val selected = selectedBuilding
             if (preview != null && selected != null && selected.assetPath.isNotBlank()) {
-                val previewInstance = rememberModelInstance(modelLoader, selected.assetPath)
+                val previewInstance = rememberBufferModelInstance(modelLoader, selected.assetPath)
                 if (previewInstance != null) {
                     ModelNode(
                         modelInstance = previewInstance,

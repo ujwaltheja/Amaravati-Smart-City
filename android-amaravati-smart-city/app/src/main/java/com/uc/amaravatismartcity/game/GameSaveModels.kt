@@ -38,6 +38,7 @@ fun GameState.toEntity(activeGoal: String, currentNews: String): GameStateEntity
         activeMissionIndex = activeMissionIndex,
         activeEmergency = activeEmergency,
         graphicsQuality = graphicsQuality,
+        lastIncomeTick = lastIncomeTick,
         totalBuildings = totalBuildings,
         activeGoal = activeGoal,
         currentNews = currentNews
@@ -71,7 +72,7 @@ fun GameStateEntity.toSnapshot(): SavedGameSnapshot {
             activeEmergency = activeEmergency,
             graphicsQuality = graphicsQuality,
             totalBuildings = totalBuildings,
-            lastIncomeTick = 0L
+            lastIncomeTick = lastIncomeTick
         ),
         activeGoal = activeGoal,
         currentNews = currentNews

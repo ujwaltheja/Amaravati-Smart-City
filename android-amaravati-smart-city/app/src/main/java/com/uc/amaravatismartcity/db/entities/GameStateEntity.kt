@@ -29,6 +29,7 @@ data class GameStateEntity(
     val activeMissionIndex: Int = 0,
     val activeEmergency: String = "",
     val graphicsQuality: Int = 1,
+    val lastIncomeTick: Long = 0L,
     val totalBuildings: Int = 0,
     val activeGoal: String = "",
     val currentNews: String = ""

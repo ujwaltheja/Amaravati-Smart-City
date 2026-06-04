@@ -73,7 +73,7 @@ class GameSaveModelsTest {
         assertEquals(original.activeEmergency, snapshot.state.activeEmergency)
         assertEquals(original.graphicsQuality, snapshot.state.graphicsQuality)
         assertEquals(original.totalBuildings, snapshot.state.totalBuildings)
-        assertEquals(0L, snapshot.state.lastIncomeTick)
+        assertEquals(original.lastIncomeTick, snapshot.state.lastIncomeTick)
         assertEquals("Build parks", snapshot.activeGoal)
         assertEquals("Good weather", snapshot.currentNews)
     }
