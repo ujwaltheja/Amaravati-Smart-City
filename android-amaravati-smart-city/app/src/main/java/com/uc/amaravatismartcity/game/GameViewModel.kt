@@ -3,8 +3,7 @@ package com.uc.amaravatismartcity.game
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.uc.amaravatismartcity.db.GameDatabase
-import com.uc.amaravatismartcity.db.entities.GameStateEntity
+import com.uc.amaravatismartcity.db.RoomGameRepository
 import com.uc.amaravatismartcity.db.entities.PlacedItemEntity
 import com.uc.amaravatismartcity.models.BuildingCategory
 import com.uc.amaravatismartcity.models.BuildingDefinition
@@ -21,8 +20,8 @@ import kotlin.math.min
 import kotlin.random.Random
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
-    private val db = GameDatabase.getDatabase(application)
-    private val dao = db.gameDao()
+    private val repository: GameRepository = RoomGameRepository(application)
+    private val placedItemIdGenerator = PlacedItemIdGenerator()
 
     private val _gameState = MutableStateFlow(GameState())
     val gameState: StateFlow<GameState> = _gameState.asStateFlow()
@@ -67,171 +66,70 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val current = _gameState.value
             val items = _placedItems.value
 
-            dao.saveGameState(
-                GameStateEntity(
-                    money = current.money,
-                    population = current.population,
-                    happiness = current.happiness,
-                    water = current.water,
-                    power = current.power,
-                    waste = current.waste,
-                    pollution = current.pollution,
-                    sustainabilityScore = current.sustainabilityScore,
-                    powerBalance = current.powerBalance,
-                    waterBalance = current.waterBalance,
-                    wasteBalance = current.wasteBalance,
-                    jobs = current.jobs,
-                    housingCapacity = current.housingCapacity,
-                    taxIncome = current.taxIncome,
-                    serviceCoverage = current.serviceCoverage,
-                    emergencyDelay = current.emergencyDelay,
-                    cityName = current.cityName,
-                    rank = current.rank,
-                    dayTime = current.dayTime,
-                    trafficDensity = current.trafficDensity,
-                    activeMissionIndex = current.activeMissionIndex,
-                    activeEmergency = current.activeEmergency,
-                    graphicsQuality = current.graphicsQuality,
-                    totalBuildings = current.totalBuildings,
-                    activeGoal = _activeGoal.value,
-                    currentNews = _currentNews.value
-                )
-            )
-
-            dao.clearPlacedItems()
-            dao.insertPlacedItems(
-                items.map {
-                    PlacedItemEntity(
-                        id = it.id,
-                        buildingId = it.definition.id,
-                        posX = it.position.x,
-                        posY = it.position.y,
-                        posZ = it.position.z,
-                        rotationY = it.rotationY,
-                        scale = it.scale
-                    )
-                }
-            )
+            repository.saveSnapshot(current, items, _activeGoal.value, _currentNews.value)
             _currentNews.value = "City data synchronized with secure archives."
         }
     }
 
     fun loadGame() {
         viewModelScope.launch {
-            val savedState = dao.getGameState()
-            if (savedState != null) {
-                _gameState.update {
-                    it.copy(
-                        money = savedState.money,
-                        population = savedState.population,
-                        happiness = savedState.happiness,
-                        water = savedState.water,
-                        power = savedState.power,
-                        waste = savedState.waste,
-                        pollution = savedState.pollution,
-                        sustainabilityScore = savedState.sustainabilityScore,
-                        powerBalance = savedState.powerBalance,
-                        waterBalance = savedState.waterBalance,
-                        wasteBalance = savedState.wasteBalance,
-                        jobs = savedState.jobs,
-                        housingCapacity = savedState.housingCapacity,
-                        taxIncome = savedState.taxIncome,
-                        serviceCoverage = savedState.serviceCoverage,
-                        emergencyDelay = savedState.emergencyDelay,
-                        cityName = savedState.cityName,
-                        rank = savedState.rank,
-                        dayTime = savedState.dayTime,
-                        trafficDensity = savedState.trafficDensity,
-                        activeMissionIndex = savedState.activeMissionIndex,
-                        activeEmergency = savedState.activeEmergency,
-                        graphicsQuality = savedState.graphicsQuality,
-                        totalBuildings = savedState.totalBuildings
-                    )
-                }
-                if (savedState.activeGoal.isNotBlank()) _activeGoal.value = savedState.activeGoal
-                if (savedState.currentNews.isNotBlank()) _currentNews.value = savedState.currentNews
-            }
+            val savedSnapshot = repository.loadSnapshot() ?: return@launch
+            _gameState.value = savedSnapshot.state
+            if (savedSnapshot.activeGoal.isNotBlank()) _activeGoal.value = savedSnapshot.activeGoal
+            if (savedSnapshot.currentNews.isNotBlank()) _currentNews.value = savedSnapshot.currentNews
         }
     }
 
     fun syncLoadedItems(entities: List<PlacedItemEntity>, catalog: List<BuildingDefinition>) {
-        val reconstructed = entities.mapNotNull { entity ->
-            val def = catalog.firstOrNull { it.id == entity.buildingId }
-            def?.let {
-                PlacedItem(
-                    id = entity.id,
-                    definition = it,
-                    position = Position(entity.posX, entity.posY, entity.posZ),
-                    rotationY = entity.rotationY,
-                    scale = entity.scale
-                )
-            }
-        }
+        val reconstructed = repository.reconstructPlacedItems(entities, catalog)
         _placedItems.value = reconstructed
+        placedItemIdGenerator.seedFrom(reconstructed)
         updateTotalBuildings(reconstructed.size)
     }
 
-    fun getSavedItemsFlow(): Flow<List<PlacedItemEntity>> = dao.getAllPlacedItems()
+    fun getSavedItemsFlow(): Flow<List<PlacedItemEntity>> = repository.observePlacedItems()
 
     fun updateNews(news: String) {
         _currentNews.value = news
     }
 
     fun triggerRandomEvent() {
-        val emergency = EmergencyType.entries.random()
-        val event = if (Random.nextFloat() < 0.45f) emergency.displayName else eventPool.random()
+        val (emergency, event) = selectEvent(
+            emergencyRoll = Random.nextFloat(),
+            emergencyOptions = EmergencyType.entries,
+            emergencyIndex = Random.nextInt(EmergencyType.entries.size),
+            eventPool = eventPool,
+            poolIndex = if (eventPool.isNotEmpty()) Random.nextInt(eventPool.size) else 0
+        )
         _currentNews.value = event
         _events.update { (it + event).takeLast(4) }
 
-        when {
-            event.contains("monsoon") || event.contains("Traffic") -> {
-                updateHappiness(-4)
-                updateTraffic(12)
-            }
-            event.contains("investor") || event.contains("festival") -> {
-                updateMoney(1800)
-                updateHappiness(5)
-            }
-            event.contains("Power") -> updatePower(-8)
-            event.contains("spill") || event.contains("Pollution") -> {
-                updatePollution(7)
-                updateHappiness(-2)
-            }
-            event.contains("green") -> {
-                updateHappiness(6)
-                updateSustainability(4)
-            }
-            event.contains("education") -> {
-                updateHappiness(3)
-                updateSustainability(2)
-            }
-            event == emergency.displayName -> {
-                _gameState.update { it.copy(activeEmergency = emergency.displayName) }
-                updateHappiness(-2)
-                if (emergency == EmergencyType.Spill) updatePollution(8)
-                if (emergency == EmergencyType.Outage) updatePower(-10)
-            }
-        }
+        val outcome = resolveEventOutcome(event, emergency)
+        if (outcome.happinessDelta != 0) updateHappiness(outcome.happinessDelta)
+        if (outcome.trafficDelta != 0) updateTraffic(outcome.trafficDelta)
+        if (outcome.moneyDelta != 0L) updateMoney(outcome.moneyDelta)
+        if (outcome.powerDelta != 0) updatePower(outcome.powerDelta)
+        if (outcome.pollutionDelta != 0) updatePollution(outcome.pollutionDelta)
+        if (outcome.sustainabilityDelta != 0) updateSustainability(outcome.sustainabilityDelta)
+        outcome.activeEmergency?.let { active -> _gameState.update { it.copy(activeEmergency = active) } }
         recalculateSmartScore()
     }
 
-    fun checkGoals(state: GameState) {
+    fun checkGoals() {
+        val state = _gameState.value
         val items = _placedItems.value
-        val graph = buildRoadGraph(items)
-        val newRank = rankForPopulation(state.population)
-        if (newRank != state.rank) {
-            _gameState.update { it.copy(rank = newRank) }
-            _currentNews.value = "CITY UPGRADE: Amaravati is now a $newRank!"
+        val resolution = resolveGoalState(state, items)
+        if (resolution.rank != state.rank) {
+            _gameState.update { it.copy(rank = resolution.rank) }
+            _currentNews.value = "CITY UPGRADE: Amaravati is now a ${resolution.rank}!"
         }
 
-        val missionIndex = state.activeMissionIndex.coerceIn(0, cityMissions.lastIndex)
-        val mission = cityMissions[missionIndex]
-        _activeGoal.value = "${mission.title}: ${mission.description}"
-        if (mission.isComplete(state, items, graph)) {
-            val next = (missionIndex + 1).coerceAtMost(cityMissions.lastIndex)
-            _gameState.update { it.copy(activeMissionIndex = next) }
-            _activeGoal.value = "${cityMissions[next].title}: ${cityMissions[next].description}"
-            _currentNews.value = "MISSION COMPLETE: ${mission.title}."
+        _activeGoal.value = resolution.activeGoalText
+        if (resolution.missionCompleted) {
+            _gameState.update { it.copy(activeMissionIndex = resolution.nextMissionIndex) }
+            resolution.completedMissionTitle?.let { title ->
+                _currentNews.value = "MISSION COMPLETE: $title."
+            }
         }
     }
 
@@ -292,7 +190,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             return false
         }
 
-        val id = System.currentTimeMillis()
+        val id = placedItemIdGenerator.next()
         addPlacedItem(PlacedItem(id = id, definition = definition, position = pos, rotationY = rotationY))
         updateMoney(-definition.cost)
         updatePopulation(definition.populationImpact)
@@ -367,23 +265,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshCitySystems() {
         val items = _placedItems.value
-        val balances = calculateBalances(items)
-        val graph = buildRoadGraph(items)
-        val coverage = serviceCoveragePercent(items)
-        _gameState.update {
-            it.copy(
-                powerBalance = balances.power,
-                waterBalance = balances.water,
-                wasteBalance = balances.waste,
-                jobs = balances.jobs,
-                housingCapacity = balances.housing,
-                taxIncome = balances.taxIncome,
-                serviceCoverage = coverage,
-                emergencyDelay = graph.emergencyDelay,
-                trafficDensity = graph.averageCongestion.coerceIn(5, 95),
-                totalBuildings = items.count { placed -> placed.definition.cost > 0 }
-            )
-        }
+        val snapshot = buildSimulationSnapshot(_gameState.value, items)
+        _gameState.update { applySimulationSnapshot(it, snapshot) }
     }
 
     fun updateDayTime(deltaHours: Float) {
@@ -420,91 +303,55 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val current = _gameState.value
         val items = _placedItems.value
         val placedCount = items.size
-        val balances = calculateBalances(items)
-        val roadGraph = buildRoadGraph(items)
+        val snapshot = buildSimulationSnapshot(current, items)
 
         updateDayTime(effDelta * 0.1f)
 
-        val incomePerSec = (balances.taxIncome / 12f + current.population * 0.28f + current.happiness * 1.2f).toLong()
-        if (effDelta > 0) {
-            val income = (incomePerSec * effDelta).toLong().coerceAtLeast(1)
-            if (System.currentTimeMillis() - current.lastIncomeTick > 650) {
-                addIncome(income, if (placedCount > 6) "Economy thriving" else "Daily commerce")
-                _gameState.update { it.copy(lastIncomeTick = System.currentTimeMillis()) }
-            }
+        val now = System.currentTimeMillis()
+        val incomeDecision = resolveIncomeTick(
+            snapshot = snapshot,
+            effDelta = effDelta,
+            nowMillis = now,
+            lastIncomeTick = current.lastIncomeTick
+        )
+        if (incomeDecision.grantIncome) {
+            addIncome(incomeDecision.incomeAmount, if (placedCount > 6) "Economy thriving" else "Daily commerce")
+        }
+        if (incomeDecision.updateLastIncomeTick) {
+            _gameState.update { it.copy(lastIncomeTick = now) }
         }
 
-        _gameState.update {
-            it.copy(
-                powerBalance = balances.power,
-                waterBalance = balances.water,
-                wasteBalance = balances.waste,
-                jobs = balances.jobs,
-                housingCapacity = balances.housing,
-                taxIncome = balances.taxIncome,
-                serviceCoverage = serviceCoveragePercent(items),
-                emergencyDelay = roadGraph.emergencyDelay,
-                trafficDensity = roadGraph.averageCongestion.coerceIn(5, 95),
-                totalBuildings = items.count { placed -> placed.definition.cost > 0 }
+        _gameState.update { applySimulationSnapshot(it, snapshot) }
+
+        val actions = resolveSimulationActions(
+            current = current,
+            snapshot = snapshot,
+            effDelta = effDelta,
+            rolls = SimulationRolls(
+                resourceRoll = Random.nextFloat(),
+                emergencyPenaltyRoll = Random.nextFloat(),
+                populationGrowthRoll = Random.nextFloat(),
+                populationDeclineRoll = Random.nextFloat(),
+                eventRoll = Random.nextFloat()
             )
+        )
+
+        if (actions.powerDelta != 0) updatePower(actions.powerDelta)
+        if (actions.waterDelta != 0) updateWater(actions.waterDelta)
+        if (actions.wasteDelta != 0) updateWaste(actions.wasteDelta)
+        if (actions.emergencyPenalty) {
+            updateHappiness(-1)
+            updateMoney(-220)
         }
-
-        val powerDrift = if (balances.power >= 0) (if (current.power < 100) 1 else 0) else -1
-        val waterDrift = if (balances.water >= 0) (if (current.water < 100) 1 else 0) else -1
-        val wasteDrift = if (balances.waste > 0) 1 else if (balances.waste < 0 && current.waste > 0) -1 else 0
-
-        if (Random.nextFloat() < 0.3f * effDelta) {
-            if (powerDrift != 0) updatePower(powerDrift)
-            if (waterDrift != 0) updateWater(waterDrift)
-            if (wasteDrift != 0) updateWaste(wasteDrift)
-        }
-
-        if (current.activeEmergency.isNotBlank()) {
-            val hasCoverage = items.any { it.definition.category == BuildingCategory.Emergency } && current.serviceCoverage > 25
-            if ((!hasCoverage || roadGraph.emergencyDelay > 70) && Random.nextFloat() < 0.12f * effDelta) {
-                updateHappiness(-1)
-                updateMoney(-220)
-            }
-        }
-
-        val targetTraffic = (roadGraph.averageCongestion + if (current.pollution > 55) 10 else 0).coerceAtMost(92)
-        val trafficDrift = ((targetTraffic - current.trafficDensity) * 0.018f * effDelta).toInt()
-        if (trafficDrift != 0) updateTraffic(trafficDrift)
-
-        val pollutionDrift = when {
-            balances.pollution > 20 && current.pollution < 85 -> 1
-            current.waste > 60 -> 1
-            current.trafficDensity > 75 -> 1
-            items.any { it.definition.category == BuildingCategory.GreenSpace } && current.pollution > 15 -> -1
-            current.pollution > 20 && Random.nextFloat() < 0.2f -> -1
-            else -> 0
-        }
-        if (pollutionDrift != 0) updatePollution(pollutionDrift)
-
-        val happyDrift = when {
-            current.power < 40 -> -2
-            current.water < 40 -> -2
-            current.waste > 70 -> -1
-            current.pollution > 65 -> -1
-            current.trafficDensity > 78 -> -1
-            current.jobs < current.population / 3 -> -1
-            current.serviceCoverage < 25 && placedCount > 8 -> -1
-            current.happiness < 55 && current.water > 80 && current.power > 80 -> 1
-            current.dayTime in 7f..19f && Random.nextFloat() < 0.2f -> 1
-            else -> 0
-        }
-        if (happyDrift != 0) updateHappiness(happyDrift)
-
-        if (current.happiness > 75 && current.power > 70 && current.water > 70 && current.population < current.housingCapacity && Random.nextFloat() < 0.5f) {
-            updatePopulation(1 + (placedCount / 8))
-        } else if ((current.happiness < 35 || current.power < 20 || current.water < 20) && Random.nextFloat() < 0.3f) {
-            updatePopulation(-1)
-        }
+        if (actions.trafficDelta != 0) updateTraffic(actions.trafficDelta)
+        if (actions.pollutionDelta != 0) updatePollution(actions.pollutionDelta)
+        if (actions.happinessDelta != 0) updateHappiness(actions.happinessDelta)
+        if (actions.populationDelta != 0) updatePopulation(actions.populationDelta)
 
         recalculateSmartScore()
-        checkGoals(current.copy(population = current.population))
+        checkGoals()
 
-        if (Random.nextFloat() < 0.012f * effDelta) {
+        if (actions.triggerEvent) {
             triggerRandomEvent()
         }
     }
