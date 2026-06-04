@@ -561,7 +561,7 @@ fun AmaravatiGameSurface(
 
             // --- TOP HUD SECTION ---
             Column(
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 GlassTopBar(gameState, isNight, isPaused, simSpeed, onBack, { viewModel.setPaused(!isPaused) }, { viewModel.setSimSpeed(it) })
