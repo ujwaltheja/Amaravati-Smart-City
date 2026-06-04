@@ -19,7 +19,7 @@ object BuildingCatalog {
                     folderScore + exactNameScore + lowDetailPenalty
                 } ?: fallback
             
-            if (match.isBlank()) {
+            if (match.isBlank() && assetPaths.isNotEmpty()) {
                 android.util.Log.e("Amaravati", "Pick failed for tokens ${tokens.joinToString()} (fallback=$fallback)")
             }
             return match

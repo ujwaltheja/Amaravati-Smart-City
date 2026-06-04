@@ -194,6 +194,29 @@ private fun GlassPanel(
 }
 
 @Composable
+fun rememberBufferModelInstance(
+    modelLoader: io.github.sceneview.loaders.ModelLoader,
+    assetPath: String
+): com.google.android.filament.gltfio.FilamentInstance? {
+    val context = LocalContext.current
+    var instance by remember(assetPath) { mutableStateOf<com.google.android.filament.gltfio.FilamentInstance?>(null) }
+    LaunchedEffect(assetPath) {
+        if (assetPath.isBlank()) return@LaunchedEffect
+        try {
+            val bytes = context.assets.open(assetPath).use { it.readBytes() }
+            val buffer = java.nio.ByteBuffer.allocateDirect(bytes.size).apply {
+                put(bytes)
+                rewind()
+            }
+            instance = modelLoader.createModelInstance(buffer)
+        } catch (e: Exception) {
+            Log.e("Amaravati", "Failed to buffer-load $assetPath", e)
+        }
+    }
+    return instance
+}
+
+@Composable
 fun AmaravatiGameSurface(
     modifier: Modifier = Modifier,
     viewModel: GameViewModel = viewModel(),
@@ -286,20 +309,14 @@ fun AmaravatiGameSurface(
         if (placedItems.isEmpty() && assetPaths.isNotEmpty() && validCatalog && savedItems.isEmpty()) {
             Log.d("Amaravati", "Starting Seeder with ${assetPaths.size} assets")
             
-            val tLow = assetPaths.firstOrNull { it.contains("tile-low", true) } ?: ""
-            val roadStraight = assetPaths.firstOrNull { it.contains("road-straight", true) } ?: tLow
+            val tLow = assetPaths.firstOrNull { it.endsWith("tile-low.glb", true) } ?: ""
+            val roadStraight = assetPaths.firstOrNull { it.endsWith("road-straight.glb", true) } ?: tLow
             val roadDef = buildingCatalog.firstOrNull { it.id == "road-basic" }
 
             Log.d("Amaravati", "Seeder Paths: tLow=$tLow, roadStraight=$roadStraight")
             
-            // Verify seeder paths
-            val tLowExists = if(tLow.isNotBlank()) try { context.assets.open(tLow).use { true } } catch(_:Exception) { false } else false
-            val roadExists = if(roadStraight.isNotBlank()) try { context.assets.open(roadStraight).use { true } } catch(_:Exception) { false } else false
-            
-            Log.d("Amaravati", "Seeder Verification: tLowExists=$tLowExists, roadExists=$roadExists")
-
-            if (!tLowExists) {
-                Log.e("Amaravati", "SEEDER ABORTED: Valid pavement tile not found in assets.")
+            if (tLow.isBlank()) {
+                Log.e("Amaravati", "SEEDER ABORTED: Pavement tile not found.")
                 return@LaunchedEffect
             }
 
