@@ -205,7 +205,7 @@ fun rememberBufferModelInstance(
             val bytes = context.assets.open(assetPath).use { it.readBytes() }
             val buffer = java.nio.ByteBuffer.allocateDirect(bytes.size).apply {
                 put(bytes)
-                rewind()
+                flip()
             }
             instance = modelLoader.createModelInstance(buffer)
         } catch (e: Exception) {
