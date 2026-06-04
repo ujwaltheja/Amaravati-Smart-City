@@ -197,19 +197,13 @@ fun rememberBufferModelInstance(
     modelLoader: io.github.sceneview.loaders.ModelLoader,
     assetPath: String
 ): com.google.android.filament.gltfio.FilamentInstance? {
-    val context = LocalContext.current
     var instance by remember(assetPath) { mutableStateOf<com.google.android.filament.gltfio.FilamentInstance?>(null) }
     LaunchedEffect(assetPath) {
         if (assetPath.isBlank()) return@LaunchedEffect
         try {
-            val bytes = context.assets.open(assetPath).use { it.readBytes() }
-            val buffer = java.nio.ByteBuffer.allocateDirect(bytes.size).apply {
-                put(bytes)
-                flip()
-            }
-            instance = modelLoader.createModelInstance(buffer)
+            instance = modelLoader.createModelInstance(assetPath)
         } catch (e: Exception) {
-            Log.e("Amaravati", "Failed to buffer-load $assetPath", e)
+            Log.e("Amaravati", "Failed to load-model $assetPath", e)
         }
     }
     return instance
