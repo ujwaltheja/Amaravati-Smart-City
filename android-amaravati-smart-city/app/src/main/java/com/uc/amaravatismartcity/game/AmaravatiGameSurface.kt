@@ -67,6 +67,20 @@ private data class RoadSegment(
     val rotationY: Float = 0f
 )
 
+private data class AmbientMover(
+    val id: Long,
+    val assetPath: String,
+    val phase: Float,
+    val speed: Float,
+    val route: AmbientRoute,
+    val scale: Float = 1f
+)
+
+private enum class AmbientRoute {
+    River,
+    Metro
+}
+
 /** Advanced Gaming HUD Constants */
 private object HUDColors {
     val GlassBackground = Color(0xFF0A1525).copy(alpha = 0.75f)
@@ -104,6 +118,14 @@ private fun computeVehiclePosition(v: AnimatedVehicle, roadSegments: List<RoadSe
         }
     }
     return Position(x, 0.12f, z)
+}
+
+private fun computeAmbientPosition(mover: AmbientMover): Position {
+    val p = mover.phase
+    return when (mover.route) {
+        AmbientRoute.River -> Position(-18f + p * 36f, 0.04f, 15.5f + sin(p * 6.28f).toFloat() * 0.7f)
+        AmbientRoute.Metro -> Position(-17f + p * 34f, 0.35f, -15.2f)
+    }
 }
 
 private fun formatMoney(m: Long): String = when {
@@ -188,6 +210,7 @@ fun AmaravatiGameSurface(
     val placedItems by viewModel.placedItems.collectAsStateWithLifecycle()
 
     val vehicles = remember { mutableStateListOf<AnimatedVehicle>() }
+    val ambientMovers = remember { mutableStateListOf<AmbientMover>() }
     val roadSegments = remember { mutableStateListOf<RoadSegment>() }
 
     var selectedBuilding by remember(assetPaths) { mutableStateOf(buildingCatalog.firstOrNull()) }
@@ -215,6 +238,23 @@ fun AmaravatiGameSurface(
     val tileAssets = remember(assetPaths) {
         listOf("tile-low.glb", "tile-high.glb", "road-straight.glb").mapNotNull { name -> assetPaths.firstOrNull { it.endsWith(name, ignoreCase = true) } }
     }
+    val riverAssets = remember(assetPaths) {
+        listOf("boat-speed-a.glb", "boat-sail-a.glb", "ship-small.glb", "boat-tug-a.glb")
+            .mapNotNull { name -> assetPaths.firstOrNull { it.endsWith(name, ignoreCase = true) } }
+    }
+    val trainAssets = remember(assetPaths) {
+        listOf("train-tram-modern.glb", "train-electric-subway-a.glb", "train-electric-city-a.glb")
+            .mapNotNull { name -> assetPaths.firstOrNull { it.endsWith(name, ignoreCase = true) } }
+    }
+    val emergencyAsset = remember(assetPaths, gameState.activeEmergency) {
+        val desired = when {
+            gameState.activeEmergency.contains("Fire", ignoreCase = true) -> "firetruck.glb"
+            gameState.activeEmergency.contains("Medical", ignoreCase = true) -> "ambulance.glb"
+            gameState.activeEmergency.contains("accident", ignoreCase = true) -> "police.glb"
+            else -> "ambulance.glb"
+        }
+        assetPaths.firstOrNull { it.endsWith(desired, ignoreCase = true) }
+    }
 
     val savedItems by viewModel.getSavedItemsFlow().collectAsStateWithLifecycle(initialValue = emptyList())
     var hasSyncLoaded by remember { mutableStateOf(false) }
@@ -230,29 +270,48 @@ fun AmaravatiGameSurface(
     LaunchedEffect(assetPaths, buildingCatalog) {
         if (placedItems.isEmpty() && assetPaths.isNotEmpty() && buildingCatalog.isNotEmpty() && savedItems.isEmpty()) {
             val tLow = tileAssets.firstOrNull { it.contains("tile-low") } ?: tileAssets.firstOrNull() ?: ""
-            val roadStraight = tileAssets.firstOrNull { it.contains("road-straight") } ?: tLow
+            val roadDef = buildingCatalog.firstOrNull { it.id == "road-basic" }
+            val roadStraight = roadDef?.assetPath ?: tileAssets.firstOrNull { it.contains("road-straight") } ?: tLow
 
             var id = 100L
-            for (x in -3..3) {
-                for (z in -2..4) {
-                    val asset = if ((z == 1 || z == -1) && roadStraight.isNotBlank()) roadStraight else tLow
+            for (x in -6..6) {
+                for (z in -4..5) {
+                    val asset = tLow
                     if (asset.isNotBlank()) {
-                        viewModel.addPlacedItem(PlacedItem(id = id++, definition = BuildingDefinition("tile-$id", BuildingCategory.Infrastructure, "Pavement", asset, 0), position = Position(x * 3.8f, -0.02f, z * 3.6f), scale = 1.05f))
+                        viewModel.addPlacedItem(PlacedItem(id = id++, definition = BuildingDefinition("tile-$id", BuildingCategory.Infrastructure, "Pavement", asset, 0), position = Position(x * 2f, -0.02f, z * 2f), scale = 1.05f))
                     }
                 }
             }
-            listOf(-2, 0, 2).forEach { x ->
-                val roadPos = Position(x * 3.8f + 0.2f, 0.01f, 0.8f)
+            ((-5)..5).forEach { x ->
+                val roadPos = Position(x * 2f, 0.01f, 0f)
                 val rId = id++
-                viewModel.addPlacedItem(PlacedItem(id = rId, definition = BuildingDefinition("road-$rId", BuildingCategory.Infrastructure, "Main Road", roadStraight, 900), position = roadPos, rotationY = 90f, scale = 0.98f))
+                viewModel.addPlacedItem(PlacedItem(id = rId, definition = roadDef ?: BuildingDefinition("road-$rId", BuildingCategory.Infrastructure, "Main Road", roadStraight, 900, roadUpgrade = RoadUpgrade.Basic), position = roadPos, rotationY = 90f, scale = 0.98f))
                 roadSegments += RoadSegment(id = rId, position = roadPos, rotationY = 90f)
             }
-            buildingCatalog.filter { it.assetPath.isNotBlank() }.take(5).forEachIndexed { i, def ->
-                viewModel.addPlacedItem(PlacedItem(id = id++, definition = def, position = Position((i-2)*5f, 0f, -6f), scale = 1.15f))
+            ((-3)..3).forEach { z ->
+                val roadPos = Position(0f, 0.01f, z * 2f)
+                val rId = id++
+                viewModel.addPlacedItem(PlacedItem(id = rId, definition = roadDef ?: BuildingDefinition("road-$rId", BuildingCategory.Infrastructure, "Main Road", roadStraight, 900, roadUpgrade = RoadUpgrade.Basic), position = roadPos, rotationY = 0f, scale = 0.98f))
+                roadSegments += RoadSegment(id = rId, position = roadPos, rotationY = 0f)
+            }
+            val starterIds = listOf("residential-house", "residential-apartment", "commercial-office", "green-central-park", "utility-water-tower", "utility-solar-farm")
+            val starterPositions = listOf(Position(-8f, 0f, -6f), Position(-4f, 0f, -6f), Position(4f, 0f, -6f), Position(8f, 0f, -4f), Position(-8f, 0f, 4f), Position(6f, 0f, 4f))
+            starterIds.mapNotNull { starterId -> buildingCatalog.firstOrNull { it.id == starterId } }
+                .zip(starterPositions)
+                .forEach { (def, position) ->
+                    viewModel.addPlacedItem(PlacedItem(id = id++, definition = def, position = position, scale = 1.15f))
             }
             if (vehicles.isEmpty() && carAssets.isNotEmpty()) {
                 carAssets.take(7).forEachIndexed { i, path ->
                     vehicles += AnimatedVehicle(id = 2000L + i, assetPath = path, lane = i % 3, speed = 4.5f + i, phase = (i * 0.14f) % 1f)
+                }
+            }
+            if (ambientMovers.isEmpty()) {
+                riverAssets.take(2).forEachIndexed { i, path ->
+                    ambientMovers += AmbientMover(id = 3000L + i, assetPath = path, phase = i * 0.42f, speed = 0.025f + i * 0.006f, route = AmbientRoute.River, scale = 1.05f)
+                }
+                trainAssets.firstOrNull()?.let { path ->
+                    ambientMovers += AmbientMover(id = 3100L, assetPath = path, phase = 0.1f, speed = 0.045f, route = AmbientRoute.Metro, scale = 1.1f)
                 }
             }
         }
@@ -281,6 +340,13 @@ fun AmaravatiGameSurface(
                     v.copy(phase = nextPhase, currentRoadId = roadId)
                 }
                 vehicles.clear(); vehicles.addAll(newVehicles)
+            }
+            if (!isPaused && ambientMovers.isNotEmpty()) {
+                val next = ambientMovers.map { mover ->
+                    val phase = (mover.phase + mover.speed * dt * simSpeed).let { if (it > 1f) it - 1f else it }
+                    mover.copy(phase = phase)
+                }
+                ambientMovers.clear(); ambientMovers.addAll(next)
             }
         }
     }
@@ -412,6 +478,36 @@ fun AmaravatiGameSurface(
                 key(v.id) {
                     val mi = remember(v.id, v.assetPath) { try { modelLoader.createModelInstance(v.assetPath) } catch (_: Exception) { null } }
                     if (mi != null) ModelNode(modelInstance = mi, scaleToUnits = v.scale, centerOrigin = Position(0f, 0f, 0f), position = pos, rotation = Position(0f, if(v.flip) 180f else 0f, 0f))
+                }
+            }
+            val maxAmbient = when (gameState.graphicsQuality) { 0 -> 1; 2 -> 4; else -> 3 }
+            val hasRiverfront = placedItems.any { it.definition.category == BuildingCategory.Riverfront } || placedItems.size < 20
+            val hasMetro = placedItems.any { it.definition.id.contains("metro") || it.definition.category == BuildingCategory.Transport }
+            for (mover in ambientMovers
+                .filter { it.route == AmbientRoute.River && hasRiverfront || it.route == AmbientRoute.Metro && hasMetro }
+                .take(maxAmbient)
+            ) {
+                val pos = computeAmbientPosition(mover)
+                key(mover.id) {
+                    val mi = remember(mover.id, mover.assetPath) { try { modelLoader.createModelInstance(mover.assetPath) } catch (_: Exception) { null } }
+                    if (mi != null) {
+                        val heading = if (mover.route == AmbientRoute.River) 90f else 90f
+                        ModelNode(modelInstance = mi, scaleToUnits = mover.scale, centerOrigin = Position(0f, 0f, 0f), position = pos, rotation = Position(0f, heading, 0f))
+                    }
+                }
+            }
+            if (gameState.activeEmergency.isNotBlank()) {
+                val target = placedItems.firstOrNull { it.definition.cost > 0 && it.definition.category != BuildingCategory.Infrastructure }?.position ?: Position(0f, 0f, -5f)
+                LightNode(type = LightManager.Type.POINT, intensity = 85000f, color = Float4(1f, 0.12f, 0.08f, 1f), position = Position(target.x, 6.5f, target.z))
+                emergencyAsset?.let { asset ->
+                    key("emergency-${gameState.activeEmergency}") {
+                        val mi = remember(asset) { try { modelLoader.createModelInstance(asset) } catch (_: Exception) { null } }
+                        if (mi != null) {
+                            val road = roadSegments.firstOrNull()
+                            val pos = road?.position ?: Position(target.x + 2f, 0.12f, target.z)
+                            ModelNode(modelInstance = mi, scaleToUnits = 0.95f, centerOrigin = Position(0f, 0f, 0f), position = pos, rotation = Position(0f, 90f, 0f))
+                        }
+                    }
                 }
             }
             val preview = placementPreview
