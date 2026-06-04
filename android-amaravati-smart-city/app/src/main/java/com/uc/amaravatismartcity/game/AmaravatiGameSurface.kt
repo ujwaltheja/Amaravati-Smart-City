@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -216,14 +218,14 @@ fun AmaravatiGameSurface(
 
     var selectedBuilding by remember(assetPaths) { mutableStateOf(buildingCatalog.firstOrNull()) }
     var isBulldozeMode by remember { mutableStateOf(false) }
-    var lastPlacementTime by remember { mutableStateOf(0L) }
+    var lastPlacementTime by remember { mutableLongStateOf(0L) }
     var isPhotoMode by remember { mutableStateOf(false) }
     var isSnapshotFlashing by remember { mutableStateOf(false) }
     var showHeatmap by remember { mutableStateOf(false) }
     var heatmapMode by remember { mutableStateOf(HeatmapMode.Traffic) }
     var sceneSize by remember { mutableStateOf(IntSize.Zero) }
     var placementPreview by remember { mutableStateOf<Position?>(null) }
-    var placementRotation by remember { mutableStateOf(0f) }
+    var placementRotation by remember { mutableFloatStateOf(0f) }
     var inspectedItem by remember { mutableStateOf<PlacedItem?>(null) }
     var pendingBulldoze by remember { mutableStateOf<PlacedItem?>(null) }
     val roadGraph = remember(placedItems) { buildRoadGraph(placedItems) }
@@ -612,7 +614,7 @@ fun AmaravatiGameSurface(
                         showHeatmap = true
                         heatmapMode = HeatmapMode.entries[(heatmapMode.ordinal + 1) % HeatmapMode.entries.size]
                     }, Modifier.size(46.dp)) { Icon(Icons.Default.Map, null, tint = if (showHeatmap) HUDColors.AmaravatiTeal else Color.White) } }
-                    GlassPanel(shape = CircleShape) { IconButton(onClick = { placementRotation = (placementRotation + 90f) % 360f }, Modifier.size(46.dp)) { Icon(Icons.Default.RotateRight, null, tint = Color.White) } }
+                    GlassPanel(shape = CircleShape) { IconButton(onClick = { placementRotation = (placementRotation + 90f) % 360f }, Modifier.size(46.dp)) { Icon(Icons.AutoMirrored.Filled.RotateRight, null, tint = Color.White) } }
                     GlassPanel(shape = CircleShape) { IconButton(onClick = { placementPreview = null; showHeatmap = false }, Modifier.size(46.dp)) { Icon(Icons.Default.Cancel, null, tint = Color.White) } }
                     GlassPanel(shape = CircleShape) { IconButton(onClick = { isBulldozeMode = !isBulldozeMode }, Modifier.size(46.dp)) { Icon(Icons.Default.Delete, null, tint = if (isBulldozeMode) Color.Red else Color.White) } }
                     GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.clearEmergency() }, Modifier.size(46.dp)) { Icon(Icons.Default.LocalHospital, null, tint = if (gameState.activeEmergency.isNotBlank()) Color(0xFFFF7043) else Color.White) } }
@@ -831,7 +833,7 @@ private fun SystemPanel(modifier: Modifier, state: GameState, graph: RoadGraph, 
             MiniMetric("Jobs", state.jobs - state.population / 3)
             MiniMetric("Housing", state.housingCapacity - state.population)
             
-            Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
             Text("BUDGET BREAKDOWN", color = HUDColors.AmaravatiTeal, fontSize = 9.sp, fontWeight = FontWeight.Black)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Taxes", color = Color.White.copy(0.7f), fontSize = 10.sp)
@@ -851,7 +853,7 @@ private fun SystemPanel(modifier: Modifier, state: GameState, graph: RoadGraph, 
                 )
             }
 
-            Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
             Text("RCI DEMAND", color = HUDColors.AmaravatiTeal, fontSize = 9.sp, fontWeight = FontWeight.Black)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RciBar("R", residentialDemand, Color(0xFF4CAF50))
@@ -859,7 +861,7 @@ private fun SystemPanel(modifier: Modifier, state: GameState, graph: RoadGraph, 
                 RciBar("I", industrialDemand, Color(0xFFFFEB3B))
             }
 
-            Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
             Text("Traffic ${graph.averageCongestion}% · Routes ${graph.routeCount}", color = Color.White.copy(0.82f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Text("Emergency delay ${graph.emergencyDelay}%", color = if (graph.emergencyDelay > 65) HUDColors.ResourceCritical else Color.White.copy(0.82f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
             if (state.activeEmergency.isNotBlank()) {
@@ -946,12 +948,12 @@ private fun InspectPanel(modifier: Modifier, item: PlacedItem, onClose: () -> Un
             }
             
             if (item.definition.category != BuildingCategory.Infrastructure) {
-                Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
                 Text("UTILITIES LINK", color = HUDColors.AmaravatiTeal, fontSize = 9.sp, fontWeight = FontWeight.Black)
                 ConnectionRow("Road Access", hasRoad)
                 ConnectionRow("Power Connection", hasPower)
                 ConnectionRow("Water Access", hasWater)
-                Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
             }
             
             OutlinedButton(onClick = onBulldoze, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, HUDColors.ResourceCritical.copy(0.8f))) {
@@ -968,7 +970,7 @@ private fun GlassTopBar(gameState: GameState, isNight: Boolean, isPaused: Boolea
     Row(Modifier.fillMaxWidth(0.96f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         GlassPanel(shape = RoundedCornerShape(16.dp)) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, modifier = Modifier.size(34.dp)) { Icon(Icons.Default.ArrowBack, null, modifier = Modifier.size(18.dp), tint = Color.White) }
+                IconButton(onClick = onBack, modifier = Modifier.size(34.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, modifier = Modifier.size(18.dp), tint = Color.White) }
                 Column { 
                     Text(gameState.cityName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 15.sp)
                     Text(gameState.rank.uppercase(), color = HUDColors.AmaravatiTeal, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold) 
