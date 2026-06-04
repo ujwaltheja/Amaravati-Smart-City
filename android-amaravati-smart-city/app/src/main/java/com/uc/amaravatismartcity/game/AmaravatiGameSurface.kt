@@ -87,6 +87,8 @@ private enum class AmbientRoute {
     Metro
 }
 
+private fun Color.toFloat4(): Float4 = Float4(red, green, blue, alpha)
+
 /** Advanced Gaming HUD Constants */
 private object HUDColors {
     val GlassBackground = Color(0xFF0A1525).copy(alpha = 0.75f)
@@ -414,8 +416,9 @@ fun AmaravatiGameSurface(
     val bgTop = when { isNight -> Color(0xFF01060F); dawnDusk -> Color(0xFF1F2A3D); else -> Color(0xFF051224) }
     val bgBot = when { isNight -> Color(0xFF031526); else -> Color(0xFF0C243D) }
 
-    val environment = rememberEnvironment(rememberEnvironmentLoader(engine)) {
-        createEnvironment()?.apply { skybox = null }
+    val environmentLoader = rememberEnvironmentLoader(engine)
+    val environment = rememberEnvironment(environmentLoader) {
+        environmentLoader.createEnvironment()!!
     }
 
     Box(modifier = modifier.fillMaxSize().background(Brush.verticalGradient(listOf(bgTop, bgBot)))) {
@@ -460,7 +463,7 @@ fun AmaravatiGameSurface(
             LightNode(
                 type = LightManager.Type.DIRECTIONAL, 
                 intensity = if (isNight) 10000f else 120000f, 
-                color = if (isNight) Color(0xFFAABBFF) else Color(0xFFFFFAEE), 
+                color = (if (isNight) Color(0xFFAABBFF) else Color(0xFFFFFAEE)).toFloat4(), 
                 direction = Float3(sin(Math.toRadians(sunAngle.toDouble())).toFloat(), -0.8f, cos(Math.toRadians(sunAngle.toDouble())).toFloat())
             )
             
@@ -469,7 +472,7 @@ fun AmaravatiGameSurface(
                     LightNode(
                         type = LightManager.Type.POINT, 
                         intensity = 45000f, 
-                        color = Color(0xFFFFD580), 
+                        color = Color(0xFFFFD580).toFloat4(), 
                         position = Position(seg.position.x, 4.5f, seg.position.z)
                     ) 
                 }
@@ -542,7 +545,7 @@ fun AmaravatiGameSurface(
                 LightNode(
                     type = LightManager.Type.POINT, 
                     intensity = 85000f, 
-                    color = Color.Red, 
+                    color = Color.Red.toFloat4(), 
                     position = Position(target.x, 6.5f, target.z)
                 )
                 emergencyAsset?.let { asset ->
