@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.util.Log
 import com.google.android.filament.LightManager
 import com.uc.amaravatismartcity.models.*
 import dev.romainguy.kotlin.math.Float3
@@ -203,7 +204,9 @@ fun AmaravatiGameSurface(
     DisposableEffect(Unit) { onDispose { soundManager.release() } }
     
     val assetPaths by produceState(initialValue = emptyList<String>(), context) {
-        value = GlbAssetIndex.scan(context.assets)
+        val scanned = GlbAssetIndex.scan(context.assets)
+        Log.d("Amaravati", "Assets found: ${scanned.size}")
+        value = scanned
     }
     val buildingCatalog = remember(assetPaths) { BuildingCatalog.defaultCatalog(assetPaths) }
     val engine = rememberEngine()
@@ -276,6 +279,7 @@ fun AmaravatiGameSurface(
     }
 
     LaunchedEffect(assetPaths, buildingCatalog) {
+        Log.d("Amaravati", "Seeder: placed=${placedItems.size}, assets=${assetPaths.size}, catalog=${buildingCatalog.size}, saved=${savedItems.size}")
         if (placedItems.isEmpty() && assetPaths.isNotEmpty() && buildingCatalog.isNotEmpty() && savedItems.isEmpty()) {
             val tLow = tileAssets.firstOrNull { it.contains("tile-low") } ?: tileAssets.firstOrNull() ?: ""
             val roadDef = buildingCatalog.firstOrNull { it.id == "road-basic" }
@@ -498,6 +502,10 @@ fun AmaravatiGameSurface(
                             position = item.position,
                             rotation = Position(0f, item.rotationY, 0f)
                         )
+                    } else {
+                        LaunchedEffect(item.definition.assetPath) {
+                            Log.e("Amaravati", "Failed to load item model: ${item.definition.assetPath}")
+                        }
                     }
                 }
             }
@@ -514,6 +522,10 @@ fun AmaravatiGameSurface(
                             position = pos,
                             rotation = Position(0f, if(v.flip) 180f else 0f, 0f)
                         )
+                    } else {
+                        LaunchedEffect(v.assetPath) {
+                            Log.e("Amaravati", "Failed to load vehicle model: ${v.assetPath}")
+                        }
                     }
                 }
             }
@@ -536,6 +548,10 @@ fun AmaravatiGameSurface(
                             position = pos,
                             rotation = Position(0f, heading, 0f)
                         )
+                    } else {
+                        LaunchedEffect(mover.assetPath) {
+                            Log.e("Amaravati", "Failed to load ambient model: ${mover.assetPath}")
+                        }
                     }
                 }
             }
