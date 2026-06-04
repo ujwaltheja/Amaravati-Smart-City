@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -528,6 +529,14 @@ fun AmaravatiGameSurface(
             }
         }
 
+        if (assetPaths.isEmpty() || placedItems.isEmpty()) {
+            CityLoadingBackdrop(
+                modifier = Modifier.fillMaxSize(),
+                isNight = isNight,
+                assetCount = assetPaths.size
+            )
+        }
+
         if (showHeatmap) {
             HeatmapOverlay(
                 modifier = Modifier.fillMaxSize(),
@@ -681,6 +690,75 @@ fun AmaravatiGameSurface(
 }
 
 // ==================== HUD COMPONENTS ====================
+
+@Composable
+private fun CityLoadingBackdrop(
+    modifier: Modifier,
+    isNight: Boolean,
+    assetCount: Int
+) {
+    Box(modifier = modifier.background(Color.Black.copy(alpha = 0.18f))) {
+        Canvas(Modifier.fillMaxSize()) {
+            val horizon = size.height * 0.52f
+            val riverTop = size.height * 0.68f
+            val skyGlow = if (isNight) Color(0xFF123D63) else Color(0xFF6BB7D8)
+            drawCircle(skyGlow.copy(alpha = 0.18f), size.minDimension * 0.42f, Offset(size.width * 0.72f, size.height * 0.22f))
+            drawRect(Color(0xFF163248).copy(alpha = 0.55f), topLeft = Offset(0f, horizon), size = Size(size.width, riverTop - horizon))
+            drawRect(Color(0xFF123D4F).copy(alpha = 0.76f), topLeft = Offset(0f, riverTop), size = Size(size.width, size.height - riverTop))
+
+            val buildingColors = listOf(Color(0xFF9FC6D8), Color(0xFFB7A889), Color(0xFFC9D5CC), Color(0xFF8EB2A9))
+            for (i in 0 until 16) {
+                val w = size.width / 18f
+                val h = size.height * (0.12f + (i % 5) * 0.035f)
+                val x = i * w * 1.15f
+                val y = horizon - h
+                drawRect(buildingColors[i % buildingColors.size].copy(alpha = 0.86f), Offset(x, y), Size(w * 0.82f, h))
+                repeat(3) { col ->
+                    repeat((h / 28f).toInt().coerceAtLeast(2)) { row ->
+                        drawRect(
+                            Color(0xFFFFE082).copy(alpha = if (isNight) 0.65f else 0.22f),
+                            Offset(x + 8f + col * 16f, y + 12f + row * 22f),
+                            Size(6f, 8f)
+                        )
+                    }
+                }
+            }
+
+            for (i in 0 until 6) {
+                val y = riverTop + i * 28f
+                drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, y), Offset(size.width, y + 18f), strokeWidth = 3f)
+            }
+            val roadY = size.height * 0.84f
+            drawLine(Color(0xFF2C3036), Offset(0f, roadY), Offset(size.width, roadY - 70f), strokeWidth = 42f)
+            drawLine(Color(0xFFFFF59D).copy(alpha = 0.7f), Offset(0f, roadY - 2f), Offset(size.width, roadY - 72f), strokeWidth = 3f)
+        }
+
+        GlassPanel(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(24.dp),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Column(
+                Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(28.dp),
+                    color = HUDColors.AmaravatiTeal,
+                    strokeWidth = 3.dp
+                )
+                Text(
+                    text = if (assetCount == 0) "LOADING CITY ASSETS" else "BUILDING STARTER CITY",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun PlacementOverlay(
