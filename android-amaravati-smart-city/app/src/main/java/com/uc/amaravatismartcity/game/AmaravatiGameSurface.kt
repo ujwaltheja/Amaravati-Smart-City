@@ -48,6 +48,9 @@ import io.github.sceneview.node.ModelNode
 import io.github.sceneview.rememberCameraManipulator
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberModelLoader
+import io.github.sceneview.rememberModelInstance
+import io.github.sceneview.rememberEnvironmentLoader
+import io.github.sceneview.rememberEnvironment
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
@@ -411,6 +414,10 @@ fun AmaravatiGameSurface(
     val bgTop = when { isNight -> Color(0xFF01060F); dawnDusk -> Color(0xFF1F2A3D); else -> Color(0xFF051224) }
     val bgBot = when { isNight -> Color(0xFF031526); else -> Color(0xFF0C243D) }
 
+    val environment = rememberEnvironment(rememberEnvironmentLoader(engine)) {
+        createEnvironment()?.apply { skybox = null }
+    }
+
     Box(modifier = modifier.fillMaxSize().background(Brush.verticalGradient(listOf(bgTop, bgBot)))) {
         SceneView(
             modifier = Modifier
@@ -442,20 +449,29 @@ fun AmaravatiGameSurface(
                         }
                     )
                 },
-            engine = engine, modelLoader = modelLoader, cameraManipulator = cameraManipulator,
+            engine = engine,
+            modelLoader = modelLoader,
+            cameraManipulator = cameraManipulator,
+            environment = environment,
             isOpaque = false
         ) {
             val sunAngle = (day - 7f) * 15f
+            
             LightNode(
                 type = LightManager.Type.DIRECTIONAL, 
-                intensity = if (isNight) 3000f else 65000f, 
-                color = if (isNight) Float4(0.6f, 0.7f, 1f, 1f) else Float4(1f, 0.98f, 0.9f, 1f), 
+                intensity = if (isNight) 10000f else 120000f, 
+                color = if (isNight) Color(0xFFAABBFF) else Color(0xFFFFFAEE), 
                 direction = Float3(sin(Math.toRadians(sunAngle.toDouble())).toFloat(), -0.8f, cos(Math.toRadians(sunAngle.toDouble())).toFloat())
             )
             
             if (isNight) {
                 for (seg in roadSegments.take(12)) {
-                    LightNode(type = LightManager.Type.POINT, intensity = 25000f, color = Float4(1f, 0.85f, 0.6f, 1f), position = Position(seg.position.x, 4.5f, seg.position.z)) 
+                    LightNode(
+                        type = LightManager.Type.POINT, 
+                        intensity = 45000f, 
+                        color = Color(0xFFFFD580), 
+                        position = Position(seg.position.x, 4.5f, seg.position.z)
+                    ) 
                 }
             }
 
@@ -464,26 +480,41 @@ fun AmaravatiGameSurface(
                 2 -> 55f * 55f
                 else -> 34f * 34f
             }
+            
             for (item in placedItems) {
                 val farSq = item.position.x * item.position.x + item.position.z * item.position.z
                 if (item.definition.cost > 0 && farSq > renderDistanceSq) continue
+                
                 key(item.id) {
-                    val mi = remember(item.id, item.definition.assetPath) { 
-                        try { modelLoader.createModelInstance(item.definition.assetPath) } catch (_: Exception) { null } 
-                    }
+                    val mi = rememberModelInstance(modelLoader, item.definition.assetPath)
                     if (mi != null) {
-                        ModelNode(modelInstance = mi, scaleToUnits = item.scale, centerOrigin = Position(0f, 0f, 0f), position = item.position, rotation = Position(0f, item.rotationY, 0f))
+                        val finalScale = if (item.definition.id.startsWith("tile")) 2.1f else item.scale
+                        ModelNode(
+                            modelInstance = mi,
+                            scaleToUnits = finalScale,
+                            position = item.position,
+                            rotation = Position(0f, item.rotationY, 0f)
+                        )
                     }
                 }
             }
+            
             val maxVehicles = when (gameState.graphicsQuality) { 0 -> 4; 2 -> 18; else -> 10 }
             for (v in vehicles.take(maxVehicles).takeIf { roadSegments.isNotEmpty() }.orEmpty()) {
                 val pos = computeVehiclePosition(v, roadSegments)
                 key(v.id) {
-                    val mi = remember(v.id, v.assetPath) { try { modelLoader.createModelInstance(v.assetPath) } catch (_: Exception) { null } }
-                    if (mi != null) ModelNode(modelInstance = mi, scaleToUnits = v.scale, centerOrigin = Position(0f, 0f, 0f), position = pos, rotation = Position(0f, if(v.flip) 180f else 0f, 0f))
+                    val mi = rememberModelInstance(modelLoader, v.assetPath)
+                    if (mi != null) {
+                        ModelNode(
+                            modelInstance = mi,
+                            scaleToUnits = v.scale,
+                            position = pos,
+                            rotation = Position(0f, if(v.flip) 180f else 0f, 0f)
+                        )
+                    }
                 }
             }
+            
             val maxAmbient = when (gameState.graphicsQuality) { 0 -> 1; 2 -> 4; else -> 3 }
             val hasRiverfront = placedItems.any { it.definition.category == BuildingCategory.Riverfront } || placedItems.size < 20
             val hasMetro = placedItems.any { it.definition.id.contains("metro") || it.definition.category == BuildingCategory.Transport }
@@ -493,38 +524,52 @@ fun AmaravatiGameSurface(
             ) {
                 val pos = computeAmbientPosition(mover)
                 key(mover.id) {
-                    val mi = remember(mover.id, mover.assetPath) { try { modelLoader.createModelInstance(mover.assetPath) } catch (_: Exception) { null } }
+                    val mi = rememberModelInstance(modelLoader, mover.assetPath)
                     if (mi != null) {
                         val heading = if (mover.route == AmbientRoute.River) 90f else 90f
-                        ModelNode(modelInstance = mi, scaleToUnits = mover.scale, centerOrigin = Position(0f, 0f, 0f), position = pos, rotation = Position(0f, heading, 0f))
+                        ModelNode(
+                            modelInstance = mi,
+                            scaleToUnits = mover.scale,
+                            position = pos,
+                            rotation = Position(0f, heading, 0f)
+                        )
                     }
                 }
             }
+            
             if (gameState.activeEmergency.isNotBlank()) {
                 val target = placedItems.firstOrNull { it.definition.cost > 0 && it.definition.category != BuildingCategory.Infrastructure }?.position ?: Position(0f, 0f, -5f)
-                LightNode(type = LightManager.Type.POINT, intensity = 85000f, color = Float4(1f, 0.12f, 0.08f, 1f), position = Position(target.x, 6.5f, target.z))
+                LightNode(
+                    type = LightManager.Type.POINT, 
+                    intensity = 85000f, 
+                    color = Color.Red, 
+                    position = Position(target.x, 6.5f, target.z)
+                )
                 emergencyAsset?.let { asset ->
                     key("emergency-${gameState.activeEmergency}") {
-                        val mi = remember(asset) { try { modelLoader.createModelInstance(asset) } catch (_: Exception) { null } }
+                        val mi = rememberModelInstance(modelLoader, asset)
                         if (mi != null) {
                             val road = roadSegments.firstOrNull()
                             val pos = road?.position ?: Position(target.x + 2f, 0.12f, target.z)
-                            ModelNode(modelInstance = mi, scaleToUnits = 0.95f, centerOrigin = Position(0f, 0f, 0f), position = pos, rotation = Position(0f, 90f, 0f))
+                            ModelNode(
+                                modelInstance = mi,
+                                scaleToUnits = 0.95f,
+                                position = pos,
+                                rotation = Position(0f, 90f, 0f)
+                            )
                         }
                     }
                 }
             }
+            
             val preview = placementPreview
             val selected = selectedBuilding
             if (preview != null && selected != null && selected.assetPath.isNotBlank()) {
-                val previewInstance = remember(selected.id, selected.assetPath) {
-                    try { modelLoader.createModelInstance(selected.assetPath) } catch (_: Exception) { null }
-                }
+                val previewInstance = rememberModelInstance(modelLoader, selected.assetPath)
                 if (previewInstance != null) {
                     ModelNode(
                         modelInstance = previewInstance,
                         scaleToUnits = 1f,
-                        centerOrigin = Position(0f, 0f, 0f),
                         position = Position(preview.x, 0.04f, preview.z),
                         rotation = Position(0f, placementRotation, 0f)
                     )
