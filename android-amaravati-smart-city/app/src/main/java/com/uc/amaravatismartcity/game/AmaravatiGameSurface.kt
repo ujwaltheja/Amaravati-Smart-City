@@ -554,10 +554,29 @@ fun AmaravatiGameSurface(
             // Safety Test Model: Force load a known asset if anything is wrong
             val testAsset = remember(assetPaths) { assetPaths.firstOrNull { it.contains("building-a") } }
             if (testAsset != null) {
-                val testMi = rememberModelInstance(modelLoader, testAsset)
+                var testMi by remember { mutableStateOf<com.google.android.filament.gltfio.FilamentInstance?>(null) }
+                LaunchedEffect(testAsset) {
+                    try {
+                        Log.d("Amaravati", "Manual Load Attempt (Buffer Mode): $testAsset")
+                        val bytes = context.assets.open(testAsset).use { it.readBytes() }
+                        val buffer = java.nio.ByteBuffer.wrap(bytes)
+                        testMi = modelLoader.createModelInstance(buffer)
+                        Log.d("Amaravati", "Manual Load Success (Buffer Mode): $testAsset")
+                    } catch (e: Exception) {
+                        Log.e("Amaravati", "Manual Load EXCEPTION (Buffer Mode): $testAsset", e)
+                        // Fallback to default load to see if it gives a different error
+                        try {
+                            Log.d("Amaravati", "Retrying with direct asset loader...")
+                            testMi = modelLoader.createModelInstance(testAsset)
+                            Log.d("Amaravati", "Direct retry Success!")
+                        } catch(e2: Exception) {
+                            Log.e("Amaravati", "Direct retry failed too", e2)
+                        }
+                    }
+                }
                 if (testMi != null) {
                     ModelNode(
-                        modelInstance = testMi,
+                        modelInstance = testMi!!,
                         scaleToUnits = 2.0f,
                         position = Position(0f, 0f, 0f)
                     )
