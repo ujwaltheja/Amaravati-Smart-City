@@ -442,7 +442,8 @@ fun AmaravatiGameSurface(
                         }
                     )
                 },
-            engine = engine, modelLoader = modelLoader, cameraManipulator = cameraManipulator
+            engine = engine, modelLoader = modelLoader, cameraManipulator = cameraManipulator,
+            isOpaque = false
         ) {
             val sunAngle = (day - 7f) * 15f
             LightNode(
