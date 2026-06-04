@@ -206,6 +206,7 @@ fun AmaravatiGameSurface(
     val assetPaths by produceState(initialValue = emptyList<String>(), context) {
         val scanned = GlbAssetIndex.scan(context.assets)
         Log.d("Amaravati", "Assets found: ${scanned.size}")
+        scanned.take(50).forEach { Log.d("Amaravati", " - Path: $it") }
         value = scanned
     }
     val buildingCatalog = remember(assetPaths) { BuildingCatalog.defaultCatalog(assetPaths) }
@@ -279,40 +280,66 @@ fun AmaravatiGameSurface(
     }
 
     LaunchedEffect(assetPaths, buildingCatalog) {
-        Log.d("Amaravati", "Seeder: placed=${placedItems.size}, assets=${assetPaths.size}, catalog=${buildingCatalog.size}, saved=${savedItems.size}")
-        if (placedItems.isEmpty() && assetPaths.isNotEmpty() && buildingCatalog.isNotEmpty() && savedItems.isEmpty()) {
-            val tLow = tileAssets.firstOrNull { it.contains("tile-low") } ?: tileAssets.firstOrNull() ?: ""
+        val validCatalog = buildingCatalog.all { it.assetPath.isNotBlank() }
+        Log.d("Amaravati", "Seeder Check: placed=${placedItems.size}, assets=${assetPaths.size}, catalogValid=$validCatalog")
+        
+        if (placedItems.isEmpty() && assetPaths.isNotEmpty() && validCatalog && savedItems.isEmpty()) {
+            Log.d("Amaravati", "Starting Seeder with ${assetPaths.size} assets")
+            
+            val tLow = assetPaths.firstOrNull { it.contains("tile-low", true) } ?: ""
+            val roadStraight = assetPaths.firstOrNull { it.contains("road-straight", true) } ?: tLow
             val roadDef = buildingCatalog.firstOrNull { it.id == "road-basic" }
-            val roadStraight = roadDef?.assetPath ?: tileAssets.firstOrNull { it.contains("road-straight") } ?: tLow
+
+            Log.d("Amaravati", "Seeder Paths: tLow=$tLow, roadStraight=$roadStraight")
+            
+            // Verify seeder paths
+            val tLowExists = if(tLow.isNotBlank()) try { context.assets.open(tLow).use { true } } catch(_:Exception) { false } else false
+            val roadExists = if(roadStraight.isNotBlank()) try { context.assets.open(roadStraight).use { true } } catch(_:Exception) { false } else false
+            
+            Log.d("Amaravati", "Seeder Verification: tLowExists=$tLowExists, roadExists=$roadExists")
+
+            if (!tLowExists) {
+                Log.e("Amaravati", "SEEDER ABORTED: Valid pavement tile not found in assets.")
+                return@LaunchedEffect
+            }
 
             var id = 100L
             for (x in -6..6) {
                 for (z in -4..5) {
-                    val asset = tLow
-                    if (asset.isNotBlank()) {
-                        viewModel.addPlacedItem(PlacedItem(id = id++, definition = BuildingDefinition("tile-$id", BuildingCategory.Infrastructure, "Pavement", asset, 0), position = Position(x * 2f, -0.02f, z * 2f), scale = 1.05f))
-                    }
+                    viewModel.addPlacedItem(PlacedItem(
+                        id = id++, 
+                        definition = BuildingDefinition("tile-$id", BuildingCategory.Infrastructure, "Pavement", tLow, 0), 
+                        position = Position(x * 2f, -0.02f, z * 2f), 
+                        scale = 1.05f
+                    ))
                 }
             }
+
             ((-5)..5).forEach { x ->
                 val roadPos = Position(x * 2f, 0.01f, 0f)
                 val rId = id++
-                viewModel.addPlacedItem(PlacedItem(id = rId, definition = roadDef ?: BuildingDefinition("road-$rId", BuildingCategory.Infrastructure, "Main Road", roadStraight, 900, roadUpgrade = RoadUpgrade.Basic), position = roadPos, rotationY = 90f, scale = 0.98f))
+                val def = roadDef?.copy(assetPath = roadStraight) ?: BuildingDefinition("road-$rId", BuildingCategory.Infrastructure, "Main Road", roadStraight, 900, roadUpgrade = RoadUpgrade.Basic)
+                viewModel.addPlacedItem(PlacedItem(id = rId, definition = def, position = roadPos, rotationY = 90f, scale = 0.98f))
                 roadSegments += RoadSegment(id = rId, position = roadPos, rotationY = 90f)
             }
             ((-3)..3).forEach { z ->
                 val roadPos = Position(0f, 0.01f, z * 2f)
                 val rId = id++
-                viewModel.addPlacedItem(PlacedItem(id = rId, definition = roadDef ?: BuildingDefinition("road-$rId", BuildingCategory.Infrastructure, "Main Road", roadStraight, 900, roadUpgrade = RoadUpgrade.Basic), position = roadPos, rotationY = 0f, scale = 0.98f))
+                val def = roadDef?.copy(assetPath = roadStraight) ?: BuildingDefinition("road-$rId", BuildingCategory.Infrastructure, "Main Road", roadStraight, 900, roadUpgrade = RoadUpgrade.Basic)
+                viewModel.addPlacedItem(PlacedItem(id = rId, definition = def, position = roadPos, rotationY = 0f, scale = 0.98f))
                 roadSegments += RoadSegment(id = rId, position = roadPos, rotationY = 0f)
             }
+            
             val starterIds = listOf("residential-house", "residential-apartment", "commercial-office", "green-central-park", "utility-water-tower", "utility-solar-farm")
             val starterPositions = listOf(Position(-8f, 0f, -6f), Position(-4f, 0f, -6f), Position(4f, 0f, -6f), Position(8f, 0f, -4f), Position(-8f, 0f, 4f), Position(6f, 0f, 4f))
+            
             starterIds.mapNotNull { starterId -> buildingCatalog.firstOrNull { it.id == starterId } }
                 .zip(starterPositions)
                 .forEach { (def, position) ->
+                    Log.d("Amaravati", "Adding starter: ${def.id} with path ${def.assetPath}")
                     viewModel.addPlacedItem(PlacedItem(id = id++, definition = def, position = position, scale = 1.15f))
             }
+
             if (vehicles.isEmpty() && carAssets.isNotEmpty()) {
                 carAssets.take(7).forEachIndexed { i, path ->
                     vehicles += AnimatedVehicle(id = 2000L + i, assetPath = path, lane = i % 3, speed = 4.5f + i, phase = (i * 0.14f) % 1f)
@@ -504,7 +531,21 @@ fun AmaravatiGameSurface(
                         )
                     } else {
                         LaunchedEffect(item.definition.assetPath) {
-                            Log.e("Amaravati", "Failed to load item model: ${item.definition.assetPath}")
+                            val path = item.definition.assetPath
+                            if (path.isBlank()) {
+                                Log.e("Amaravati", "Item ${item.id} has BLANK asset path")
+                            } else {
+                                val exists = try {
+                                    context.assets.open(path).use { true }
+                                } catch (e: Exception) {
+                                    false
+                                }
+                                if (exists) {
+                                    Log.e("Amaravati", "Model LOAD failure (Engine): $path")
+                                } else {
+                                    Log.e("Amaravati", "Model FILE NOT FOUND: $path")
+                                }
+                            }
                         }
                     }
                 }

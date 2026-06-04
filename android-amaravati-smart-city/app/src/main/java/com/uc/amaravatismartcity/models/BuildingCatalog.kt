@@ -5,7 +5,7 @@ object BuildingCatalog {
         val fallback = assetPaths.firstOrNull().orEmpty()
 
         fun pick(vararg tokens: String, preferFolder: String? = null, avoid: List<String> = emptyList()): String {
-            return assetPaths
+            val match = assetPaths
                 .asSequence()
                 .filter { assetPath ->
                     val lower = assetPath.lowercase()
@@ -18,6 +18,11 @@ object BuildingCatalog {
                     val lowDetailPenalty = if (lower.contains("low-detail")) -8 else 0
                     folderScore + exactNameScore + lowDetailPenalty
                 } ?: fallback
+            
+            if (match.isBlank()) {
+                android.util.Log.e("Amaravati", "Pick failed for tokens ${tokens.joinToString()} (fallback=$fallback)")
+            }
+            return match
         }
 
         return listOf(
