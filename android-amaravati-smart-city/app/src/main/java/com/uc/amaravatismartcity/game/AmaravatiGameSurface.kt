@@ -535,156 +535,156 @@ fun AmaravatiGameSurface(
                 isNight = isNight,
                 assetCount = assetPaths.size
             )
-        }
-
-        if (showHeatmap) {
-            HeatmapOverlay(
-                modifier = Modifier.fillMaxSize(),
-                items = placedItems,
-                graph = roadGraph,
-                state = gameState,
-                mode = heatmapMode
-            )
-        }
-
-        placementPreview?.let { preview ->
-            PlacementOverlay(
-                modifier = Modifier.fillMaxSize(),
-                preview = preview,
-                sceneSize = sceneSize,
-                isValid = placementIsValid,
-                selected = selectedBuilding
-            )
-        }
-
-        // --- TOP HUD SECTION ---
-        Column(
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            GlassTopBar(gameState, isNight, isPaused, simSpeed, onBack, { viewModel.setPaused(!isPaused) }, { viewModel.setSimSpeed(it) })
-            Spacer(Modifier.height(8.dp))
-            GlassNewsTicker(currentNews, isNight)
-        }
-        
-        // --- GOAL TRACKER ---
-        GlassGoalTracker(
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 100.dp, start = 16.dp), 
-            activeGoal = activeGoal, 
-            population = gameState.population
-        )
-
-        // --- RADAR MINIMAP ---
-        GlassMinimap(
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 100.dp, end = 16.dp).size(110.dp), 
-            items = placedItems, 
-            roads = roadSegments, 
-            vehicles = vehicles, 
-            center = Position(0f, 0f, 0f)
-        )
-
-        SystemPanel(
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 220.dp, end = 16.dp).width(190.dp),
-            state = gameState,
-            graph = roadGraph,
-            heatmapMode = if (showHeatmap) heatmapMode else null
-        )
-
-        inspectedItem?.let { item ->
-            InspectPanel(
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).width(210.dp),
-                item = item,
-                onClose = { inspectedItem = null },
-                onBulldoze = { demolishItem(item) }
-            )
-        }
-        
-        // --- ACTION BUTTONS ---
-        Column(
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), 
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            GlassPanel(shape = CircleShape) { IconButton(onClick = onBuildInView, Modifier.size(46.dp)) { Icon(Icons.Default.AddLocation, null, tint = HUDColors.AmaravatiTeal) } }
-            GlassPanel(shape = CircleShape) { IconButton(onClick = { isPhotoMode = !isPhotoMode }, Modifier.size(46.dp)) { Icon(if(isPhotoMode) Icons.Default.Close else Icons.Default.CameraAlt, null, tint = if (isPhotoMode) Color.White else HUDColors.AmaravatiTeal) } }
-            if (!isPhotoMode) {
-                GlassPanel(shape = CircleShape) { IconButton(onClick = {
-                    showHeatmap = true
-                    heatmapMode = HeatmapMode.entries[(heatmapMode.ordinal + 1) % HeatmapMode.entries.size]
-                }, Modifier.size(46.dp)) { Icon(Icons.Default.Map, null, tint = if (showHeatmap) HUDColors.AmaravatiTeal else Color.White) } }
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { placementRotation = (placementRotation + 90f) % 360f }, Modifier.size(46.dp)) { Icon(Icons.Default.RotateRight, null, tint = Color.White) } }
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { placementPreview = null; showHeatmap = false }, Modifier.size(46.dp)) { Icon(Icons.Default.Cancel, null, tint = Color.White) } }
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { isBulldozeMode = !isBulldozeMode }, Modifier.size(46.dp)) { Icon(Icons.Default.Delete, null, tint = if (isBulldozeMode) Color.Red else Color.White) } }
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.clearEmergency() }, Modifier.size(46.dp)) { Icon(Icons.Default.LocalHospital, null, tint = if (gameState.activeEmergency.isNotBlank()) Color(0xFFFF7043) else Color.White) } }
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.setGraphicsQuality((gameState.graphicsQuality + 1) % 3) }, Modifier.size(46.dp)) { Icon(Icons.Default.Tune, null, tint = Color.White) } }
-                Spacer(Modifier.height(6.dp))
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.saveGame() }, Modifier.size(40.dp)) { Icon(Icons.Default.Save, null, tint = Color.White.copy(0.7f)) } }
-                GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.loadGame() }, Modifier.size(40.dp)) { Icon(Icons.Default.Restore, null, tint = Color.White.copy(0.7f)) } }
-            }
-        }
-
-        // --- PHOTO MODE ---
-        if (isPhotoMode) {
-            Box(Modifier.fillMaxSize()) {
-                IconButton(onClick = { isSnapshotFlashing = true; viewModel.updateNews("Snapshot saved.") }, Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp).size(80.dp).background(Color.White.copy(0.12f), CircleShape).border(2.5.dp, Color.White, CircleShape)) { Icon(Icons.Default.Camera, null, modifier = Modifier.size(40.dp), tint = Color.White) }
-                Text("PHOTO MODE", color = Color.White.copy(0.4f), fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopCenter).padding(top = 180.dp), letterSpacing = 6.sp)
-            }
-        }
-
-        if (isSnapshotFlashing) { Box(Modifier.fillMaxSize().background(Color.White)); LaunchedEffect(Unit) { delay(80); isSnapshotFlashing = false } }
-
-        // --- BUILDING DOCK ---
-        if (!isPhotoMode) {
-            Column(
-                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp), 
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (selectedBuilding != null) {
-                    val b = selectedBuilding!!
-                    GlassInspectorCard(
-                        building = b,
-                        canAfford = gameState.money >= b.cost,
-                        previewPosition = placementPreview,
-                        canPlacePreview = placementPreview?.let { canPlaceOnGrid(b, it, placedItems) } ?: true,
-                        onPreview = { placementPreview = Position(0f, 0.02f, -12f) },
-                        onBuildInView = onBuildInView
-                    )
-                    Spacer(Modifier.height(16.dp))
-                }
-                GlassBuildDock(
-                    catalog = buildingCatalog, 
-                    selected = selectedBuilding, 
-                    onSelect = { selectedBuilding = it }, 
-                    onQuickRoad = {
-                        buildingCatalog.firstOrNull { it.category == BuildingCategory.Infrastructure }?.let {
-                            selectedBuilding = it
-                            placementPreview = Position(0f, 0.02f, -12f)
-                        }
-                    }, 
-                    pop = gameState.population
+        } else {
+            if (showHeatmap) {
+                HeatmapOverlay(
+                    modifier = Modifier.fillMaxSize(),
+                    items = placedItems,
+                    graph = roadGraph,
+                    state = gameState,
+                    mode = heatmapMode
                 )
             }
-        }
-        
-        Box(modifier = Modifier.align(Alignment.TopEnd).padding(top = 74.dp, end = 20.dp)) { 
-            TimeOfDayBadge(gameState.dayTime, isNight) 
-        }
 
-        pendingBulldoze?.let { item ->
-            AlertDialog(
-                onDismissRequest = { pendingBulldoze = null },
-                title = { Text("Confirm bulldoze") },
-                text = { Text("${item.definition.title} is expensive. Bulldoze for a partial refund?") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.bulldoze(item)
-                        pendingBulldoze = null
-                        inspectedItem = null
-                    }) { Text("Bulldoze") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { pendingBulldoze = null }) { Text("Cancel") }
-                }
+            placementPreview?.let { preview ->
+                PlacementOverlay(
+                    modifier = Modifier.fillMaxSize(),
+                    preview = preview,
+                    sceneSize = sceneSize,
+                    isValid = placementIsValid,
+                    selected = selectedBuilding
+                )
+            }
+
+            // --- TOP HUD SECTION ---
+            Column(
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                GlassTopBar(gameState, isNight, isPaused, simSpeed, onBack, { viewModel.setPaused(!isPaused) }, { viewModel.setSimSpeed(it) })
+                Spacer(Modifier.height(8.dp))
+                GlassNewsTicker(currentNews, isNight)
+            }
+            
+            // --- GOAL TRACKER ---
+            GlassGoalTracker(
+                modifier = Modifier.align(Alignment.TopStart).padding(top = 100.dp, start = 16.dp).width(220.dp), 
+                activeGoal = activeGoal, 
+                population = gameState.population
             )
+
+            // --- RADAR MINIMAP ---
+            GlassMinimap(
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 100.dp, end = 16.dp).size(110.dp), 
+                items = placedItems, 
+                roads = roadSegments, 
+                vehicles = vehicles, 
+                center = Position(0f, 0f, 0f)
+            )
+
+            SystemPanel(
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 220.dp, end = 16.dp).width(190.dp),
+                state = gameState,
+                graph = roadGraph,
+                heatmapMode = if (showHeatmap) heatmapMode else null
+            )
+
+            inspectedItem?.let { item ->
+                InspectPanel(
+                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).width(210.dp),
+                    item = item,
+                    onClose = { inspectedItem = null },
+                    onBulldoze = { demolishItem(item) }
+                )
+            }
+            
+            // --- ACTION BUTTONS ---
+            Column(
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), 
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                GlassPanel(shape = CircleShape) { IconButton(onClick = onBuildInView, Modifier.size(46.dp)) { Icon(Icons.Default.AddLocation, null, tint = HUDColors.AmaravatiTeal) } }
+                GlassPanel(shape = CircleShape) { IconButton(onClick = { isPhotoMode = !isPhotoMode }, Modifier.size(46.dp)) { Icon(if(isPhotoMode) Icons.Default.Close else Icons.Default.CameraAlt, null, tint = if (isPhotoMode) Color.White else HUDColors.AmaravatiTeal) } }
+                if (!isPhotoMode) {
+                    GlassPanel(shape = CircleShape) { IconButton(onClick = {
+                        showHeatmap = true
+                        heatmapMode = HeatmapMode.entries[(heatmapMode.ordinal + 1) % HeatmapMode.entries.size]
+                    }, Modifier.size(46.dp)) { Icon(Icons.Default.Map, null, tint = if (showHeatmap) HUDColors.AmaravatiTeal else Color.White) } }
+                    GlassPanel(shape = CircleShape) { IconButton(onClick = { placementRotation = (placementRotation + 90f) % 360f }, Modifier.size(46.dp)) { Icon(Icons.Default.RotateRight, null, tint = Color.White) } }
+                    GlassPanel(shape = CircleShape) { IconButton(onClick = { placementPreview = null; showHeatmap = false }, Modifier.size(46.dp)) { Icon(Icons.Default.Cancel, null, tint = Color.White) } }
+                    GlassPanel(shape = CircleShape) { IconButton(onClick = { isBulldozeMode = !isBulldozeMode }, Modifier.size(46.dp)) { Icon(Icons.Default.Delete, null, tint = if (isBulldozeMode) Color.Red else Color.White) } }
+                    GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.clearEmergency() }, Modifier.size(46.dp)) { Icon(Icons.Default.LocalHospital, null, tint = if (gameState.activeEmergency.isNotBlank()) Color(0xFFFF7043) else Color.White) } }
+                    GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.setGraphicsQuality((gameState.graphicsQuality + 1) % 3) }, Modifier.size(46.dp)) { Icon(Icons.Default.Tune, null, tint = Color.White) } }
+                    Spacer(Modifier.height(6.dp))
+                    GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.saveGame() }, Modifier.size(40.dp)) { Icon(Icons.Default.Save, null, tint = Color.White.copy(0.7f)) } }
+                    GlassPanel(shape = CircleShape) { IconButton(onClick = { viewModel.loadGame() }, Modifier.size(40.dp)) { Icon(Icons.Default.Restore, null, tint = Color.White.copy(0.7f)) } }
+                }
+            }
+
+            // --- PHOTO MODE ---
+            if (isPhotoMode) {
+                Box(Modifier.fillMaxSize()) {
+                    IconButton(onClick = { isSnapshotFlashing = true; viewModel.updateNews("Snapshot saved.") }, Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp).size(80.dp).background(Color.White.copy(0.12f), CircleShape).border(2.5.dp, Color.White, CircleShape)) { Icon(Icons.Default.Camera, null, modifier = Modifier.size(40.dp), tint = Color.White) }
+                    Text("PHOTO MODE", color = Color.White.copy(0.4f), fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopCenter).padding(top = 180.dp), letterSpacing = 6.sp)
+                }
+            }
+
+            if (isSnapshotFlashing) { Box(Modifier.fillMaxSize().background(Color.White)); LaunchedEffect(Unit) { delay(80); isSnapshotFlashing = false } }
+
+            // --- BUILDING DOCK ---
+            if (!isPhotoMode) {
+                Column(
+                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp), 
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (selectedBuilding != null) {
+                        val b = selectedBuilding!!
+                        GlassInspectorCard(
+                            building = b,
+                            canAfford = gameState.money >= b.cost,
+                            previewPosition = placementPreview,
+                            canPlacePreview = placementPreview?.let { canPlaceOnGrid(b, it, placedItems) } ?: true,
+                            onPreview = { placementPreview = Position(0f, 0.02f, -12f) },
+                            onBuildInView = onBuildInView
+                        )
+                        Spacer(Modifier.height(16.dp))
+                    }
+                    GlassBuildDock(
+                        catalog = buildingCatalog, 
+                        selected = selectedBuilding, 
+                        onSelect = { selectedBuilding = it }, 
+                        onQuickRoad = {
+                            buildingCatalog.firstOrNull { it.category == BuildingCategory.Infrastructure }?.let {
+                                selectedBuilding = it
+                                placementPreview = Position(0f, 0.02f, -12f)
+                            }
+                        }, 
+                        pop = gameState.population
+                    )
+                }
+            }
+            
+            Box(modifier = Modifier.align(Alignment.TopEnd).padding(top = 74.dp, end = 20.dp)) { 
+                TimeOfDayBadge(gameState.dayTime, isNight) 
+            }
+
+            pendingBulldoze?.let { item ->
+                AlertDialog(
+                    onDismissRequest = { pendingBulldoze = null },
+                    title = { Text("Confirm bulldoze") },
+                    text = { Text("${item.definition.title} is expensive. Bulldoze for a partial refund?") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.bulldoze(item)
+                            pendingBulldoze = null
+                            inspectedItem = null
+                        }) { Text("Bulldoze") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingBulldoze = null }) { Text("Cancel") }
+                    }
+                )
+            }
         }
     }
 }
