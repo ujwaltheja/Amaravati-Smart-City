@@ -57,7 +57,8 @@ fun resolveIncomeTick(
     lastIncomeTick: Long
 ): IncomeTickDecision {
     if (effDelta <= 0f) return IncomeTickDecision(grantIncome = false, incomeAmount = 0L, updateLastIncomeTick = false)
-    val incomeAmount = (snapshot.incomePerSecond * effDelta).toLong().coerceAtLeast(1)
+    val baseIncome = (snapshot.incomePerSecond * effDelta).toLong()
+    val incomeAmount = if (snapshot.incomePerSecond >= 0) baseIncome.coerceAtLeast(1) else baseIncome
     val canGrant = hasIncomeTickElapsed(lastIncomeTick = lastIncomeTick, nowMillis = nowMillis)
     return IncomeTickDecision(
         grantIncome = canGrant,
@@ -122,11 +123,41 @@ fun buildSimulationSnapshot(state: GameState, items: List<PlacedItem>): CitySimu
     val roadGraph = buildRoadGraph(items)
     val serviceCoverage = serviceCoveragePercent(items)
     val totalBuildings = items.count { it.definition.cost > 0 }
-    val incomePerSecond = (balances.taxIncome / 12f + state.population * 0.28f + state.happiness * 1.2f).toLong()
+    
+    val upkeep = calculateUpkeep(items)
+    val grossIncomePerSecond = (balances.taxIncome / 12f + state.population * 0.28f + state.happiness * 1.2f).toLong()
+    val incomePerSecond = grossIncomePerSecond - (upkeep / 12L).coerceAtLeast(1L)
+    
     val targetTraffic = (roadGraph.averageCongestion + if (state.pollution > 55) 10 else 0).coerceAtMost(92)
     val powerDrift = if (balances.power >= 0) (if (state.power < 100) 1 else 0) else -1
     val waterDrift = if (balances.water >= 0) (if (state.water < 100) 1 else 0) else -1
     val wasteDrift = if (balances.waste > 0) 1 else if (balances.waste < 0 && state.waste > 0) -1 else 0
+    
+    val roadCells = items.filter { isRoad(it.definition) }.map { it.position.gridCell() }.toSet()
+    val solarGrids = items.filter { it.definition.id == "utility-solar-farm" }
+    val waterTowers = items.filter { it.definition.id == "utility-water-tower" }
+    
+    val unconnectedCount = items.filter { it.definition.category != BuildingCategory.Infrastructure && it.definition.cost > 0 }.count { item ->
+        val cell = item.position.gridCell()
+        val hasRoad = roadCells.isEmpty() || listOf(
+            GridCell(cell.x + 1, cell.z),
+            GridCell(cell.x - 1, cell.z),
+            GridCell(cell.x, cell.z + 1),
+            GridCell(cell.x, cell.z - 1)
+        ).any { it in roadCells }
+        
+        val hasPower = item.definition.powerImpact >= 0 || solarGrids.isEmpty() || solarGrids.any { solar ->
+            kotlin.math.hypot(item.position.x - solar.position.x, item.position.z - solar.position.z) <= solar.definition.serviceCoverage * CITY_GRID_SIZE
+        }
+        
+        val hasWater = item.definition.waterImpact >= 0 || waterTowers.isEmpty() || waterTowers.any { tower ->
+            kotlin.math.hypot(item.position.x - tower.position.x, item.position.z - tower.position.z) <= tower.definition.serviceCoverage * CITY_GRID_SIZE
+        }
+        
+        !(hasRoad && hasPower && hasWater)
+    }
+    
+    val unconnectedPenalty = if (unconnectedCount > 0) -1 else 0
     val pollutionDrift = when {
         balances.pollution > 20 && state.pollution < 85 -> 1
         state.waste > 60 -> 1
@@ -135,6 +166,7 @@ fun buildSimulationSnapshot(state: GameState, items: List<PlacedItem>): CitySimu
         state.pollution > 20 -> -1
         else -> 0
     }
+    
     val happinessDrift = when {
         state.power < 40 -> -2
         state.water < 40 -> -2
@@ -146,19 +178,20 @@ fun buildSimulationSnapshot(state: GameState, items: List<PlacedItem>): CitySimu
         state.happiness < 55 && state.water > 80 && state.power > 80 -> 1
         state.dayTime in 7f..19f -> 1
         else -> 0
-    }
+    } + unconnectedPenalty
+    
     val populationGrowth = if (
         state.happiness > 75 && state.power > 70 && state.water > 70 &&
-        state.population < state.housingCapacity
+        state.population < state.housingCapacity && unconnectedCount == 0
     ) {
         1 + (totalBuildings / 8)
-    } else if (state.happiness < 35 || state.power < 20 || state.water < 20) {
+    } else if (state.happiness < 35 || state.power < 20 || state.water < 20 || unconnectedCount > totalBuildings / 2) {
         -1
     } else {
         0
     }
     val emergencyCoverage = items.any { it.definition.category == BuildingCategory.Emergency } && serviceCoverage > 25
-
+ 
     return CitySimulationSnapshot(
         balances = balances,
         roadGraph = roadGraph,

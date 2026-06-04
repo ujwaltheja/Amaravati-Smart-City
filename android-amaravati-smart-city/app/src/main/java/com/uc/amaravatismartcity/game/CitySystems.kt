@@ -103,15 +103,88 @@ fun canPlaceOnGrid(definition: BuildingDefinition, position: Position, items: Li
     return !isRoad(definition) || position.x % CITY_GRID_SIZE == 0f && position.z % CITY_GRID_SIZE == 0f
 }
 
+fun calculateUpkeep(items: List<PlacedItem>): Long {
+    return items.sumOf { item ->
+        val cost = item.definition.cost
+        when (item.definition.category) {
+            BuildingCategory.Infrastructure -> (cost * 0.04f).toLong().coerceAtLeast(2)
+            BuildingCategory.Utilities -> (cost * 0.08f).toLong().coerceAtLeast(20)
+            BuildingCategory.Emergency -> (cost * 0.10f).toLong().coerceAtLeast(50)
+            BuildingCategory.Government -> (cost * 0.08f).toLong().coerceAtLeast(100)
+            BuildingCategory.Transport -> (cost * 0.06f).toLong().coerceAtLeast(60)
+            BuildingCategory.Education -> (cost * 0.07f).toLong().coerceAtLeast(40)
+            BuildingCategory.GreenSpace -> (cost * 0.05f).toLong().coerceAtLeast(10)
+            else -> 0L
+        }
+    }
+}
+
 fun calculateBalances(items: List<PlacedItem>): CityBalances {
+    var netTax = 0L
+    var powerGen = 0
+    var waterGen = 0
+    var wasteGen = 0
+    var pollutionGen = 0
+    var jobsTotal = 0
+    var housingTotal = 0
+    
+    val roadCells = items.filter { isRoad(it.definition) }.map { it.position.gridCell() }.toSet()
+    val solarGrids = items.filter { it.definition.id == "utility-solar-farm" }
+    val waterTowers = items.filter { it.definition.id == "utility-water-tower" }
+    
+    items.forEach { item ->
+        val def = item.definition
+        if (def.category == BuildingCategory.Infrastructure) {
+            netTax += def.taxIncome
+            powerGen += def.powerImpact
+            waterGen += def.waterImpact
+            wasteGen += def.wasteImpact
+            pollutionGen += def.pollutionImpact
+            return@forEach
+        }
+        
+        val cell = item.position.gridCell()
+        val hasRoad = roadCells.isEmpty() || listOf(
+            GridCell(cell.x + 1, cell.z),
+            GridCell(cell.x - 1, cell.z),
+            GridCell(cell.x, cell.z + 1),
+            GridCell(cell.x, cell.z - 1)
+        ).any { it in roadCells }
+        
+        val hasPower = def.powerImpact >= 0 || solarGrids.isEmpty() || solarGrids.any { solar ->
+            hypot(item.position.x - solar.position.x, item.position.z - solar.position.z) <= solar.definition.serviceCoverage * CITY_GRID_SIZE
+        }
+        
+        val hasWater = def.waterImpact >= 0 || waterTowers.isEmpty() || waterTowers.any { tower ->
+            hypot(item.position.x - tower.position.x, item.position.z - tower.position.z) <= tower.definition.serviceCoverage * CITY_GRID_SIZE
+        }
+        
+        val fullyConnected = hasRoad && hasPower && hasWater
+        
+        if (fullyConnected) {
+            netTax += def.taxIncome
+            jobsTotal += def.jobs
+            housingTotal += def.housingCapacity
+        } else {
+            netTax += (def.taxIncome * 0.1f).toLong()
+            jobsTotal += (def.jobs * 0.15f).toInt()
+            housingTotal += (def.housingCapacity * 0.15f).toInt()
+        }
+        
+        powerGen += def.powerImpact
+        waterGen += def.waterImpact
+        wasteGen += def.wasteImpact
+        pollutionGen += def.pollutionImpact
+    }
+    
     return CityBalances(
-        power = items.sumOf { it.definition.powerImpact },
-        water = items.sumOf { it.definition.waterImpact },
-        waste = items.sumOf { it.definition.wasteImpact },
-        pollution = items.sumOf { it.definition.pollutionImpact },
-        jobs = items.sumOf { it.definition.jobs },
-        housing = items.sumOf { it.definition.housingCapacity },
-        taxIncome = items.sumOf { it.definition.taxIncome },
+        power = powerGen,
+        water = waterGen,
+        waste = wasteGen,
+        pollution = pollutionGen,
+        jobs = jobsTotal,
+        housing = housingTotal,
+        taxIncome = netTax,
         serviceCoverage = items.filter { it.definition.serviceCoverage > 0 }.sumOf { it.definition.serviceCoverage }
     )
 }

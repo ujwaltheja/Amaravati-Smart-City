@@ -586,7 +586,8 @@ fun AmaravatiGameSurface(
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 220.dp, end = 16.dp).width(190.dp),
                 state = gameState,
                 graph = roadGraph,
-                heatmapMode = if (showHeatmap) heatmapMode else null
+                heatmapMode = if (showHeatmap) heatmapMode else null,
+                items = placedItems
             )
 
             inspectedItem?.let { item ->
@@ -594,7 +595,8 @@ fun AmaravatiGameSurface(
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).width(210.dp),
                     item = item,
                     onClose = { inspectedItem = null },
-                    onBulldoze = { demolishItem(item) }
+                    onBulldoze = { demolishItem(item) },
+                    allItems = placedItems
                 )
             }
             
@@ -806,7 +808,20 @@ private fun HeatmapOverlay(
 }
 
 @Composable
-private fun SystemPanel(modifier: Modifier, state: GameState, graph: RoadGraph, heatmapMode: HeatmapMode?) {
+private fun SystemPanel(modifier: Modifier, state: GameState, graph: RoadGraph, heatmapMode: HeatmapMode?, items: List<PlacedItem>) {
+    val upkeep = calculateUpkeep(items)
+    val tax = state.taxIncome
+    val net = tax - upkeep
+
+    // RCI demand indicators
+    val resJobs = items.filter { it.definition.category == BuildingCategory.Commercial || it.definition.category == BuildingCategory.Industrial }.sumOf { it.definition.jobs }
+    val commJobs = items.filter { it.definition.category == BuildingCategory.Commercial }.sumOf { it.definition.jobs }
+    val indJobs = items.filter { it.definition.category == BuildingCategory.Industrial }.sumOf { it.definition.jobs }
+    
+    val residentialDemand = (((resJobs - state.population) * 1.5f) + (state.population - state.housingCapacity) * 2f).toInt().coerceIn(-100, 100)
+    val commercialDemand = ((state.population / 2.5f - commJobs) * 2.0f).toInt().coerceIn(-100, 100)
+    val industrialDemand = ((state.population / 3.0f - indJobs) * 2.0f).toInt().coerceIn(-100, 100)
+
     GlassPanel(modifier = modifier, shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("CITY SYSTEMS", color = HUDColors.AmaravatiTeal, fontSize = 10.sp, fontWeight = FontWeight.Black)
@@ -815,6 +830,36 @@ private fun SystemPanel(modifier: Modifier, state: GameState, graph: RoadGraph, 
             MiniMetric("Waste", -state.wasteBalance)
             MiniMetric("Jobs", state.jobs - state.population / 3)
             MiniMetric("Housing", state.housingCapacity - state.population)
+            
+            Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+            Text("BUDGET BREAKDOWN", color = HUDColors.AmaravatiTeal, fontSize = 9.sp, fontWeight = FontWeight.Black)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Taxes", color = Color.White.copy(0.7f), fontSize = 10.sp)
+                Text("+₹${formatMoney(tax)}", color = HUDColors.AmaravatiTeal, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Upkeep", color = Color.White.copy(0.7f), fontSize = 10.sp)
+                Text("-₹${formatMoney(upkeep)}", color = HUDColors.ResourceCritical, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Net Flow", color = Color.White.copy(0.9f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (net >= 0) "+₹${formatMoney(net)}" else "-₹${formatMoney(kotlin.math.abs(net))}",
+                    color = if (net >= 0) HUDColors.AmaravatiTeal else HUDColors.ResourceCritical,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+
+            Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+            Text("RCI DEMAND", color = HUDColors.AmaravatiTeal, fontSize = 9.sp, fontWeight = FontWeight.Black)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RciBar("R", residentialDemand, Color(0xFF4CAF50))
+                RciBar("C", commercialDemand, Color(0xFF2196F3))
+                RciBar("I", industrialDemand, Color(0xFFFFEB3B))
+            }
+
+            Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
             Text("Traffic ${graph.averageCongestion}% · Routes ${graph.routeCount}", color = Color.White.copy(0.82f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Text("Emergency delay ${graph.emergencyDelay}%", color = if (graph.emergencyDelay > 65) HUDColors.ResourceCritical else Color.White.copy(0.82f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
             if (state.activeEmergency.isNotBlank()) {
@@ -829,6 +874,17 @@ private fun SystemPanel(modifier: Modifier, state: GameState, graph: RoadGraph, 
 }
 
 @Composable
+private fun RowScope.RciBar(label: String, value: Int, color: Color) {
+    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = Color.White.copy(0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Box(Modifier.fillMaxWidth().height(10.dp).background(Color.White.copy(0.1f), RoundedCornerShape(2.dp))) {
+            val progress = ((value + 100) / 200f).coerceIn(0f, 1f)
+            Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(color, RoundedCornerShape(2.dp)))
+        }
+    }
+}
+
+@Composable
 private fun MiniMetric(label: String, value: Int) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = Color.White.copy(0.7f), fontSize = 10.sp)
@@ -837,7 +893,37 @@ private fun MiniMetric(label: String, value: Int) {
 }
 
 @Composable
-private fun InspectPanel(modifier: Modifier, item: PlacedItem, onClose: () -> Unit, onBulldoze: () -> Unit) {
+private fun ConnectionRow(label: String, connected: Boolean) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.White.copy(0.7f), fontSize = 10.sp)
+        Text(if (connected) "CONNECTED" else "OFFLINE", color = if (connected) HUDColors.AmaravatiTeal else HUDColors.ResourceCritical, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun InspectPanel(modifier: Modifier, item: PlacedItem, onClose: () -> Unit, onBulldoze: () -> Unit, allItems: List<PlacedItem>) {
+    val roadCells = allItems.filter { isRoad(it.definition) }.map { it.position.gridCell() }.toSet()
+    val itemCell = item.position.gridCell()
+    
+    val hasRoad = roadCells.isEmpty() || listOf(
+        GridCell(itemCell.x + 1, itemCell.z),
+        GridCell(itemCell.x - 1, itemCell.z),
+        GridCell(itemCell.x, itemCell.z + 1),
+        GridCell(itemCell.x, itemCell.z - 1)
+    ).any { it in roadCells }
+    
+    val solarGrids = allItems.filter { it.definition.id == "utility-solar-farm" }
+    val hasPower = item.definition.powerImpact >= 0 || solarGrids.isEmpty() || solarGrids.any { solar ->
+        kotlin.math.hypot(item.position.x - solar.position.x, item.position.z - solar.position.z) <= solar.definition.serviceCoverage * CITY_GRID_SIZE
+    }
+    
+    val waterTowers = allItems.filter { it.definition.id == "utility-water-tower" }
+    val hasWater = item.definition.waterImpact >= 0 || waterTowers.isEmpty() || waterTowers.any { tower ->
+        kotlin.math.hypot(item.position.x - tower.position.x, item.position.z - tower.position.z) <= tower.definition.serviceCoverage * CITY_GRID_SIZE
+    }
+    
+    val connected = hasRoad && hasPower && hasWater || item.definition.category == BuildingCategory.Infrastructure
+
     GlassPanel(modifier = modifier, shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -847,10 +933,27 @@ private fun InspectPanel(modifier: Modifier, item: PlacedItem, onClose: () -> Un
             Text(item.definition.category.displayName, color = HUDColors.AmaravatiTeal, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Text("Footprint ${item.definition.width}x${item.definition.depth}", color = Color.White.copy(0.74f), fontSize = 10.sp)
             Text("Jobs ${item.definition.jobs} · Housing ${item.definition.housingCapacity}", color = Color.White.copy(0.74f), fontSize = 10.sp)
-            Text("Tax ₹${formatMoney(item.definition.taxIncome)}", color = Color.White.copy(0.74f), fontSize = 10.sp)
+            
+            val taxAmount = if (connected) item.definition.taxIncome else (item.definition.taxIncome * 0.1f).toLong()
+            Text(
+                text = "Tax ₹${formatMoney(taxAmount)}" + if (!connected && item.definition.category != BuildingCategory.Infrastructure) " (10% unconnected)" else "", 
+                color = if (connected) Color.White.copy(0.74f) else HUDColors.ResourceCritical, 
+                fontSize = 10.sp
+            )
+            
             if (item.definition.roadUpgrade != RoadUpgrade.None) {
                 Text("${item.definition.roadUpgrade.displayName} capacity ${item.definition.roadUpgrade.capacity}", color = Color.White.copy(0.74f), fontSize = 10.sp)
             }
+            
+            if (item.definition.category != BuildingCategory.Infrastructure) {
+                Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+                Text("UTILITIES LINK", color = HUDColors.AmaravatiTeal, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                ConnectionRow("Road Access", hasRoad)
+                ConnectionRow("Power Connection", hasPower)
+                ConnectionRow("Water Access", hasWater)
+                Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+            }
+            
             OutlinedButton(onClick = onBulldoze, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, HUDColors.ResourceCritical.copy(0.8f))) {
                 Icon(Icons.Default.Delete, null, modifier = Modifier.size(14.dp), tint = HUDColors.ResourceCritical)
                 Spacer(Modifier.width(6.dp))
